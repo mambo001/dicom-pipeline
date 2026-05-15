@@ -6,7 +6,7 @@
   "main": "dist/main/main.js",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.preload.json && vite build",
+    "build": "npm run build --workspace @dicom-pipeline/contracts && tsc -p tsconfig.main.json && tsc -p tsconfig.preload.json && vite build",
     "start": "electron .",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "lint": "npm run typecheck",
