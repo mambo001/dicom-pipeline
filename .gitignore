@@ -1,0 +1,13 @@
+node_modules/
+.DS_Store
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+gcp-sa-key.json
+service-account.json
+storage/
+uploads/
+tmp/
