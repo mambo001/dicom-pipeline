@@ -2,7 +2,7 @@
   "name": "@dicom-pipeline/desktop",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
+  "type": "commonjs",
   "main": "dist/main/main.js",
   "scripts": {
     "dev": "vite --host 127.0.0.1",

@@ -3,6 +3,8 @@ import { readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
 
+declare const __dirname: string;
+
 type SelectedDicomFile = {
   readonly path: string;
   readonly name: string;
@@ -17,7 +19,7 @@ async function createWindow(): Promise<void> {
     minWidth: 920,
     minHeight: 640,
     webPreferences: {
-      preload: join(import.meta.dirname, "../preload/preload.js"),
+      preload: join(__dirname, "../preload/preload.js"),
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -28,7 +30,7 @@ async function createWindow(): Promise<void> {
     return;
   }
 
-  await window.loadFile(join(import.meta.dirname, "../renderer/index.html"));
+  await window.loadFile(join(__dirname, "../renderer/index.html"));
 }
 
 ipcMain.handle("dicom:select-file", async (): Promise<SelectedDicomFile | undefined> => {
