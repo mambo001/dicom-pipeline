@@ -130,30 +130,12 @@ describe("createApp", () => {
     expect(statusAfterUpload.status).toBe(200);
     expect(await statusAfterUpload.json()).toMatchObject({ status: "uploaded" });
 
-    const ohif = await fetch(`${baseUrl}/api/ohif/upload-sessions/${session.uploadSessionId}.json`);
+    const signedRead = await fetch(`${baseUrl}/api/upload-sessions/${session.uploadSessionId}/signed-read`);
 
-    expect(ohif.status).toBe(200);
-    expect(await ohif.json()).toMatchObject({
-      studies: [
-        {
-          StudyInstanceUID: "1.2.3",
-          series: [
-            {
-              SeriesInstanceUID: "1.2.3.4",
-              instances: [
-                {
-                  metadata: {
-                    Rows: 512,
-                    Columns: 512,
-                    SOPInstanceUID: "1.2.3.4.5"
-                  }
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    });
+    expect(signedRead.status).toBe(200);
+    const signedReadBody = await signedRead.json() as { readonly signedReadUrl: string };
+    expect(typeof signedReadBody.signedReadUrl).toBe("string");
+    expect(signedReadBody.signedReadUrl.length).toBeGreaterThan(0);
   });
 
   it("allows CORS from allowed origin", async () => {

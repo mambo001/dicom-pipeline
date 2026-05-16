@@ -10,7 +10,6 @@ import {
 } from "@dicom-pipeline/contracts";
 import type { AuditEvent, CreateUploadSessionRequest, StorageObjectRecord, UploadStatusUpdate } from "@dicom-pipeline/contracts";
 import { apiError } from "./data/http";
-import { createOhifDicomJsonManifest } from "./integration/ohifManifest";
 import { createUploadSession } from "./integration/uploadSessions";
 import type { AuditLog } from "./ports/AuditLog";
 import type { ObjectStorage } from "./ports/ObjectStorage";
@@ -128,7 +127,7 @@ export function createApp(dependencies: AppDependencies, appEnv: "development" |
     response.json(record);
   });
 
-  app.get("/api/ohif/upload-sessions/:uploadSessionId.json", sessionReadLimiter, async (request, response) => {
+  app.get("/api/upload-sessions/:uploadSessionId/signed-read", sessionReadLimiter, async (request, response) => {
     const { uploadSessionId } = request.params as { readonly uploadSessionId: string };
     const record = await dependencies.storageRecords.get(uploadSessionId);
 
@@ -138,12 +137,12 @@ export function createApp(dependencies: AppDependencies, appEnv: "development" |
     }
 
     if (record.status !== "uploaded") {
-      response.status(409).json(apiError("upload_not_available", "Upload must complete before opening the OHIF viewer"));
+      response.status(409).json(apiError("upload_not_available", "Upload must complete before generating a signed read URL"));
       return;
     }
 
     const signedRead = await dependencies.objectStorage.createSignedRead(record.objectName);
-    response.json(createOhifDicomJsonManifest(record, signedRead.signedReadUrl));
+    response.json({ signedReadUrl: signedRead.signedReadUrl });
   });
 
   app.post("/api/upload-sessions/:uploadSessionId/status", statusUpdateLimiter, async (request, response) => {
