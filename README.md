@@ -110,3 +110,7 @@ Backend env vars: `PORT` (8080), `APP_ENV`, `GCS_BUCKET`, `GCS_SIGNED_URL_TTL_SE
 **In scope:** local DICOM selection, metadata inspection, de-identification preview, signed-URL upload, in-app viewer for uploaded files, audit trail, shared contracts, Cloud Run deployment.
 
 **Not in scope:** clinical-grade de-identification, PACS/VNA/HL7/FHIR integration, HIPAA compliance claims, production database storage.
+
+### Persistence Note
+
+Audit events and storage records are written to local JSON files (`storage/audit-events.json` and `storage/storage-records.json`). This is intentional for demo purposes — it requires zero infrastructure setup and survives container restarts. For production, replace the file adapters with a durable database (PostgreSQL, Firestore, DynamoDB, etc.).

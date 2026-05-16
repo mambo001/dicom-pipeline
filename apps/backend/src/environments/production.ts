@@ -1,13 +1,13 @@
 import type { AppConfig } from "../data/config";
-import { makeInMemoryAuditLog } from "../adapters/in-memory/AuditLog";
+import { makeFileAuditLog } from "../adapters/file/AuditLog";
 import { makeGcsObjectStorage } from "../adapters/gcs/ObjectStorage";
-import { makeInMemoryStorageRecords } from "../adapters/in-memory/StorageRecords";
+import { makeFileStorageRecords } from "../adapters/file/StorageRecords";
 import type { AppDependencies } from "../program";
 
 export function makeProductionDependencies(config: AppConfig): AppDependencies {
   return {
-    auditLog: makeInMemoryAuditLog(),
+    auditLog: makeFileAuditLog(),
     objectStorage: makeGcsObjectStorage(config),
-    storageRecords: makeInMemoryStorageRecords()
+    storageRecords: makeFileStorageRecords()
   };
 }
