@@ -398,8 +398,8 @@ function buildDeidentificationReport(metadata: DicomMetadataSummary): Deidentifi
     kind: "deidentification_report",
     rulesetId: "prototype-basic-phi-v1",
     findings: [
-      ...(metadata.patientName ? [{ tag: "0010,0010", name: "Patient Name", action: "replaced" as const }] : []),
-      ...(metadata.patientId ? [{ tag: "0010,0020", name: "Patient ID", action: "replaced" as const }] : []),
+      ...(metadata.patientName ? [{ tag: "0010,0010", name: "Patient Name", action: "removed" as const }] : []),
+      ...(metadata.patientId ? [{ tag: "0010,0020", name: "Patient ID", action: "removed" as const }] : []),
       ...(metadata.patientBirthDate ? [{ tag: "0010,0030", name: "Patient Birth Date", action: "removed" as const }] : []),
       ...(metadata.studyDate ? [{ tag: "0008,0020", name: "Study Date", action: "retained" as const }] : [])
     ]
