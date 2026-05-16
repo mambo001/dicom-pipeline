@@ -13,6 +13,8 @@ type SelectedDicomFile = {
   readonly name: string;
   readonly sizeBytes: number;
   readonly sha256: string;
+  readonly scrubbedPath: string;
+  readonly scrubbedSha256: string;
 };
 
 type DicomInspection = {
@@ -38,7 +40,7 @@ type DicomDesktopApi = {
   readonly uploadDicomFile: (
     input: {
       readonly uploadId: string;
-      readonly filePath: string;
+      readonly scrubbedFilePath: string;
       readonly signedUploadUrl: string;
       readonly sizeBytes: number;
     },
@@ -173,9 +175,11 @@ export const useIngestionStore = create<IngestionState>((set, get) => ({
     });
     addMessage(set, "success", `Selected ${file.name}`);
 
-    await appendAuditEvent(set, get, nextCorrelationId, "dicom.file.selected", "local_file", file.sha256, {
+    await appendAuditEvent(set, get, nextCorrelationId, "dicom.file.selected", "local_file", file.scrubbedSha256, {
       fileName: file.name,
-      sizeBytes: file.sizeBytes
+      sizeBytes: file.sizeBytes,
+      originalSha256: file.sha256,
+      scrubbedSha256: file.scrubbedSha256
     });
 
     await inspectSelectedFile(set, get, file, nextCorrelationId);
@@ -188,7 +192,7 @@ export const useIngestionStore = create<IngestionState>((set, get) => ({
       return;
     }
 
-    await appendAuditEvent(set, get, correlationId, "upload.session.requested", "local_file", selectedFile.sha256, {
+    await appendAuditEvent(set, get, correlationId, "upload.session.requested", "local_file", selectedFile.scrubbedSha256, {
       fileName: selectedFile.name
     });
 
@@ -213,7 +217,7 @@ export const useIngestionStore = create<IngestionState>((set, get) => ({
         fileName: selectedFile.name,
         contentType: "application/dicom",
         dicomMetadata: safeMetadata,
-        fileSha256: selectedFile.sha256,
+        fileSha256: selectedFile.scrubbedSha256,
         sizeBytes: selectedFile.sizeBytes
       })
     });
@@ -256,7 +260,7 @@ export const useIngestionStore = create<IngestionState>((set, get) => ({
       const result = await getDesktopApi().uploadDicomFile(
         {
           uploadId,
-          filePath: selectedFile.path,
+          scrubbedFilePath: selectedFile.scrubbedPath,
           signedUploadUrl: uploadSession.signedUploadUrl,
           sizeBytes: selectedFile.sizeBytes
         },
@@ -275,7 +279,8 @@ export const useIngestionStore = create<IngestionState>((set, get) => ({
       await updateUploadStatus(set, get, backendUrl, uploadSession.uploadSessionId, "uploaded");
       await appendAuditEvent(set, get, correlationId, "upload.succeeded", "storage_object", uploadSession.objectName, {
         uploadSessionId: uploadSession.uploadSessionId,
-        sizeBytes: selectedFile.sizeBytes
+        sizeBytes: selectedFile.sizeBytes,
+        scrubbedSha256: selectedFile.scrubbedSha256
       });
       addMessage(set, "success", "File uploaded to signed storage URL.");
     } catch (error) {
@@ -466,8 +471,8 @@ async function inspectSelectedFile(
       });
     }
 
-    await appendAuditEvent(set, get, nextCorrelationId, "dicom.deidentified", "local_file", file.sha256, {
-      mode: "preview_only",
+    await appendAuditEvent(set, get, nextCorrelationId, "dicom.deidentified", "local_file", file.scrubbedSha256, {
+      mode: "scrubbed_before_upload",
       rulesetId: inspection.deidentificationReport.rulesetId
     });
     addMessage(set, "success", "DICOM metadata inspected and de-identification preview generated.");

@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { createReadStream, writeFileSync, unlinkSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { basename, join } from "node:path";
+import { tmpdir } from "node:os";
 import { URL } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
 
@@ -14,11 +15,13 @@ type SelectedDicomFile = {
   readonly name: string;
   readonly sizeBytes: number;
   readonly sha256: string;
+  readonly scrubbedPath: string;
+  readonly scrubbedSha256: string;
 };
 
 type UploadDicomFileInput = {
   readonly uploadId: string;
-  readonly filePath: string;
+  readonly scrubbedFilePath: string;
   readonly signedUploadUrl: string;
   readonly sizeBytes: number;
 };
@@ -122,6 +125,67 @@ const dicomPreviewNumericTags = new Map<string, "samplesPerPixel" | "bitsAllocat
 
 const longExplicitVr = new Set(["OB", "OD", "OF", "OL", "OV", "OW", "SQ", "UC", "UR", "UT", "UN"]);
 
+// Tags to scrub from DICOM before upload (HIPAA Safe Harbor patient identifiers)
+const phiTags = new Set(["0010,0010", "0010,0020", "0010,0030"]);
+
+function scrubDicom(contents: Buffer): Buffer {
+  const scrubbed = Buffer.from(contents);
+  const hasPreamble = scrubbed.length > 132 && scrubbed.subarray(128, 132).toString("ascii") === "DICM";
+  let offset = hasPreamble ? 132 : 0;
+  let explicitVr = true;
+
+  while (offset + 8 <= scrubbed.length) {
+    const group = scrubbed.readUInt16LE(offset);
+    const element = scrubbed.readUInt16LE(offset + 2);
+    const tag = `${group.toString(16).padStart(4, "0")},${element.toString(16).padStart(4, "0")}`;
+    const vr = explicitVr ? scrubbed.subarray(offset + 4, offset + 6).toString("ascii") : "UN";
+    const headerLength: number = explicitVr && longExplicitVr.has(vr) ? 12 : 8;
+    const valueLength: number = explicitVr
+      ? longExplicitVr.has(vr)
+        ? scrubbed.readUInt32LE(offset + 8)
+        : scrubbed.readUInt16LE(offset + 6)
+      : scrubbed.readUInt32LE(offset + 4);
+
+    if (valueLength === 0xffffffff || offset + headerLength + valueLength > scrubbed.length) {
+      break;
+    }
+
+    const valueOffset = offset + headerLength;
+
+    if (phiTags.has(tag)) {
+      // Fill value bytes with spaces (0x20) — keeps structure, removes content
+      scrubbed.fill(0x20, valueOffset, valueOffset + valueLength);
+    }
+
+    if (tag === "0002,0010") {
+      explicitVr = scrubbed.subarray(valueOffset, valueOffset + valueLength).toString("ascii").replace(/\0/g, "").trim() !== "1.2.840.10008.1.2";
+    }
+
+    if (tag === "7fe0,0010") {
+      break;
+    }
+
+    offset = valueOffset + valueLength + (valueLength % 2);
+  }
+
+  return scrubbed;
+}
+
+// Track temp files for cleanup
+const tempFiles: string[] = [];
+
+function cleanupTempFiles(): void {
+  for (const path of tempFiles) {
+    try {
+      unlinkSync(path);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+app.on("before-quit", cleanupTempFiles);
+
 async function createWindow(): Promise<void> {
   const window = new BrowserWindow({
     width: 1180,
@@ -157,11 +221,19 @@ ipcMain.handle("dicom:select-file", async (): Promise<SelectedDicomFile | undefi
   const path = result.filePaths[0];
   const [fileStat, contents] = await Promise.all([stat(path), readFile(path)]);
 
+  // Scrub PHI tags from DICOM before any upload
+  const scrubbed = scrubDicom(contents);
+  const scrubbedPath = join(tmpdir(), `dicom-scrubbed-${Date.now()}.dcm`);
+  writeFileSync(scrubbedPath, scrubbed);
+  tempFiles.push(scrubbedPath);
+
   return {
     path,
     name: basename(path),
     sizeBytes: fileStat.size,
-    sha256: createHash("sha256").update(contents).digest("hex")
+    sha256: createHash("sha256").update(contents).digest("hex"),
+    scrubbedPath,
+    scrubbedSha256: createHash("sha256").update(scrubbed).digest("hex")
   };
 });
 
@@ -209,7 +281,7 @@ ipcMain.handle("dicom:upload-file", async (event, input: UploadDicomFileInput): 
     request.on("error", reject);
 
     let uploadedBytes = 0;
-    const stream = createReadStream(input.filePath);
+    const stream = createReadStream(input.scrubbedFilePath);
 
     stream.on("data", (chunk: string | Buffer) => {
       uploadedBytes += Buffer.byteLength(chunk);

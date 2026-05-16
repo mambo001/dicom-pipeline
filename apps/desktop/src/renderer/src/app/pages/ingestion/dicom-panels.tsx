@@ -56,6 +56,9 @@ export function DeidentificationCard() {
               ))
             )}
           </List>
+          <Typography variant="caption" color="text.secondary">
+            The uploaded file is scrubbed before transmission: patient identifiers are replaced with empty values in the DICOM binary. The local preview above shows the original values for operator review only.
+          </Typography>
         </Stack>
       )}
     </InfoCard>

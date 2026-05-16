@@ -107,9 +107,20 @@ Backend env vars: `PORT` (8080), `APP_ENV`, `GCS_BUCKET`, `GCS_SIGNED_URL_TTL_SE
 
 ## Scope
 
-**In scope:** local DICOM selection, metadata inspection, de-identification preview, signed-URL upload, in-app viewer for uploaded files, audit trail, shared contracts, Cloud Run deployment.
+**In scope:** local DICOM selection, metadata inspection, DICOM binary de-identification (PHI tag scrubbing), de-identification preview, signed-URL upload, in-app viewer for uploaded files, audit trail, shared contracts, Cloud Run deployment.
 
-**Not in scope:** clinical-grade de-identification, PACS/VNA/HL7/FHIR integration, HIPAA compliance claims, production database storage.
+**Not in scope:** clinical-grade de-identification covering all 18 HIPAA Safe Harbor identifiers, PACS/VNA/HL7/FHIR integration, HIPAA compliance claims, production database storage.
+
+### De-Identification
+
+The app scrubs three common DICOM patient identifiers from the file binary before upload:
+- Patient Name (`0010,0010`) → replaced with spaces
+- Patient ID (`0010,0020`) → replaced with spaces
+- Patient Birth Date (`0010,0030`) → replaced with spaces
+
+The original metadata is visible locally for operator review. The scrubbed file is uploaded to cloud storage; the backend never receives patient identifiers in the `dicomMetadata` payload. The audit trail records both original and scrubbed SHA-256 hashes.
+
+This is a **prototype Safe Harbor implementation**, not a certified HIPAA compliance tool. A production system would need to scrub all 18 HIPAA Safe Harbor identifier types, generalize dates to year-only, remove geographic data, and undergo third-party validation.
 
 ### Persistence Note
 

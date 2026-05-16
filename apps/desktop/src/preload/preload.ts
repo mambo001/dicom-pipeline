@@ -5,11 +5,13 @@ type SelectedDicomFile = {
   readonly name: string;
   readonly sizeBytes: number;
   readonly sha256: string;
+  readonly scrubbedPath: string;
+  readonly scrubbedSha256: string;
 };
 
 type UploadDicomFileInput = {
   readonly uploadId: string;
-  readonly filePath: string;
+  readonly scrubbedFilePath: string;
   readonly signedUploadUrl: string;
   readonly sizeBytes: number;
 };
