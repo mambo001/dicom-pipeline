@@ -51,6 +51,15 @@ jobs:
           docker push "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${GITHUB_SHA}"
           docker push "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:latest"
 
+      - name: Generate env vars file
+        run: |
+          cat > env.yaml <<ENVEOF
+          APP_ENV: production
+          GCS_BUCKET: ${GCP_PROJECT_ID}-dicom
+          GCS_SIGNED_URL_TTL_SECONDS: "900"
+          ALLOWED_ORIGINS: "${{ vars.ALLOWED_ORIGINS || 'http://localhost:5173' }}"
+          ENVEOF
+
       - name: Deploy backend to Cloud Run
         run: |
           IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${GITHUB_SHA}"
@@ -60,7 +69,4 @@ jobs:
             --image="$IMAGE" \
             --service-account="dicom-pipeline-backend@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
             --allow-unauthenticated \
-            --update-env-vars="APP_ENV=production" \
-            --update-env-vars="GCS_BUCKET=${GCP_PROJECT_ID}-dicom" \
-            --update-env-vars="GCS_SIGNED_URL_TTL_SECONDS=900" \
-            --update-env-vars="ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS || 'http://localhost:5173' }}"
+            --env-vars-file=env.yaml
