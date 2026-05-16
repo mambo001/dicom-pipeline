@@ -114,6 +114,17 @@ Step 3 ──► renderer ◄──IPC──► main ──stream──► stora
 ```bash
 npm install
 npm run typecheck
+npm run dev
 ```
 
 App-specific run commands are documented in each app README.
+
+### Platform Compatibility
+
+The `npm run dev` command currently works on **macOS**. It does not work on Linux or WSL because:
+
+- The `concurrently` process group uses `-k` (`--kill-others`), which relies on `ps` flag support that differs between macOS and Linux
+- Signal handling across spawned processes is inconsistent on Linux/WSL, causing orphaned `tsc --watch` and `vite` processes
+- The `wait-on` timeout is configured for fast macOS filesystem behavior and may false-fail on slower Linux mounts
+
+Fixes are specific to the host OS process model and are out of scope for this prototype. If you need a Linux development environment, start the backend, renderer, and Electron main/preload processes in separate terminals.
