@@ -7,7 +7,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspaces --if-present",
+    "dev": "npm run build --workspace @dicom-pipeline/contracts && concurrently -k -n backend,renderer,main,preload,electron -c blue,green,magenta,cyan,yellow \"npm run dev --workspace @dicom-pipeline/backend\" \"npm run dev:renderer --workspace @dicom-pipeline/desktop\" \"npm run dev:main --workspace @dicom-pipeline/desktop\" \"npm run dev:preload --workspace @dicom-pipeline/desktop\" \"npm run dev:electron --workspace @dicom-pipeline/desktop\"",
+    "dev:backend": "npm run dev --workspace @dicom-pipeline/backend",
+    "dev:desktop": "npm run dev --workspace @dicom-pipeline/desktop",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
@@ -15,7 +17,10 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.17",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
     "typescript": "^5.8.3",
+    "wait-on": "^9.0.3",
     "vitest": "^3.2.0"
   }
 }

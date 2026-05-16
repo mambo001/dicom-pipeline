@@ -5,7 +5,11 @@
   "type": "commonjs",
   "main": "dist/main/main.js",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "npm run dev:renderer",
+    "dev:renderer": "vite --host 127.0.0.1",
+    "dev:main": "tsc -p tsconfig.main.json --watch --preserveWatchOutput",
+    "dev:preload": "tsc -p tsconfig.preload.json --watch --preserveWatchOutput",
+    "dev:electron": "wait-on tcp:8080 http://127.0.0.1:5173 dist/main/main.js dist/preload/preload.js && cross-env ELECTRON_RENDERER_URL=http://127.0.0.1:5173 electron .",
     "build": "npm run build --workspace @dicom-pipeline/contracts && tsc -p tsconfig.main.json && tsc -p tsconfig.preload.json && vite build",
     "start": "electron .",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
