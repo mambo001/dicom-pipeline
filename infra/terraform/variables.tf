@@ -18,5 +18,5 @@ variable "backend_image" {
 variable "allowed_origins" {
   description = "Comma-separated list of allowed CORS origins for the backend"
   type        = string
-  default     = "http://localhost:5173"
+  default     = "http://localhost:5173,http://127.0.0.1:5173"
 }

@@ -88,6 +88,13 @@ resource "google_storage_bucket_iam_member" "backend_storage_viewer" {
   member = "serviceAccount:${google_service_account.backend.email}"
 }
 
+# Allow the service account to sign blobs (needed for GCS signed URLs)
+resource "google_service_account_iam_member" "backend_token_creator" {
+  service_account_id = google_service_account.backend.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.backend.email}"
+}
+
 # ============================================================================
 # Cloud Run
 # ============================================================================
@@ -107,7 +114,7 @@ resource "google_cloud_run_v2_service" "backend" {
   }
 
   template {
-    service_account = google_service_account.backend.email
+    service_account                  = google_service_account.backend.email
     max_instance_request_concurrency = 80
     scaling {
       max_instance_count = 1

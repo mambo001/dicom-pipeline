@@ -57,7 +57,7 @@ jobs:
           APP_ENV: production
           GCS_BUCKET: ${GCP_PROJECT_ID}-dicom
           GCS_SIGNED_URL_TTL_SECONDS: "900"
-          ALLOWED_ORIGINS: "${{ vars.ALLOWED_ORIGINS || 'http://localhost:5173' }}"
+          ALLOWED_ORIGINS: "${{ vars.ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173' }}"
           ENVEOF
 
       - name: Deploy backend to Cloud Run
