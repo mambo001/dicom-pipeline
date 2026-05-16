@@ -7,6 +7,7 @@ import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
+import LinearProgress from "@mui/material/LinearProgress";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemText from "@mui/material/ListItemText";
@@ -29,6 +30,15 @@ type SelectedDicomFile = {
 
 type DicomDesktopApi = {
   readonly selectDicomFile: () => Promise<SelectedDicomFile | undefined>;
+  readonly uploadDicomFile: (
+    input: {
+      readonly uploadId: string;
+      readonly filePath: string;
+      readonly signedUploadUrl: string;
+      readonly sizeBytes: number;
+    },
+    onProgress: (progress: { readonly uploadedBytes: number; readonly totalBytes: number }) => void
+  ) => Promise<{ readonly ok: boolean; readonly statusCode: number; readonly responseBody: string }>;
 };
 
 function getDesktopApi(): DicomDesktopApi {
@@ -40,11 +50,15 @@ type WorkflowMessage = {
   readonly text: string;
 };
 
+type UploadStatus = "idle" | "uploading" | "uploaded" | "failed";
+
 export function IngestionWorkspace() {
   const [backendUrl, setBackendUrl] = useState("http://localhost:8080");
   const [correlationId, setCorrelationId] = useState(() => crypto.randomUUID());
   const [selectedFile, setSelectedFile] = useState<SelectedDicomFile>();
   const [uploadSession, setUploadSession] = useState<CreateUploadSessionResponse>();
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [messages, setMessages] = useState<readonly WorkflowMessage[]>([]);
 
   async function selectFile() {
@@ -58,6 +72,8 @@ export function IngestionWorkspace() {
     setCorrelationId(nextCorrelationId);
     setSelectedFile(file);
     setUploadSession(undefined);
+    setUploadStatus("idle");
+    setUploadProgress(0);
     addMessage("success", `Selected ${file.name}`);
 
     await appendAuditEvent(nextCorrelationId, "dicom.file.selected", "local_file", file.sha256, {
@@ -96,7 +112,79 @@ export function IngestionWorkspace() {
 
     const session = (await response.json()) as CreateUploadSessionResponse;
     setUploadSession(session);
+    setUploadStatus("idle");
+    setUploadProgress(0);
     addMessage("success", "Upload session created with signed storage URL.");
+  }
+
+  async function uploadFile() {
+    if (!selectedFile || !uploadSession) {
+      addMessage("error", "Create an upload session before uploading the file.");
+      return;
+    }
+
+    const uploadId = crypto.randomUUID();
+
+    setUploadStatus("uploading");
+    setUploadProgress(0);
+    await updateUploadStatus(uploadSession.uploadSessionId, "uploading");
+    await appendAuditEvent(correlationId, "upload.started", "upload_session", uploadSession.uploadSessionId, {
+      objectName: uploadSession.objectName
+    });
+
+    try {
+      const result = await getDesktopApi().uploadDicomFile(
+        {
+          uploadId,
+          filePath: selectedFile.path,
+          signedUploadUrl: uploadSession.signedUploadUrl,
+          sizeBytes: selectedFile.sizeBytes
+        },
+        (progress) => {
+          if (progress.totalBytes > 0) {
+            setUploadProgress(Math.round((progress.uploadedBytes / progress.totalBytes) * 100));
+          }
+        }
+      );
+
+      if (!result.ok) {
+        throw new Error(`Upload failed with HTTP ${result.statusCode}`);
+      }
+
+      setUploadStatus("uploaded");
+      setUploadProgress(100);
+      await updateUploadStatus(uploadSession.uploadSessionId, "uploaded");
+      await appendAuditEvent(correlationId, "upload.succeeded", "storage_object", uploadSession.objectName, {
+        uploadSessionId: uploadSession.uploadSessionId,
+        sizeBytes: selectedFile.sizeBytes
+      });
+      addMessage("success", "File uploaded to signed storage URL.");
+    } catch (error) {
+      setUploadStatus("failed");
+      await updateUploadStatus(uploadSession.uploadSessionId, "failed");
+      await appendAuditEvent(
+        correlationId,
+        "upload.failed",
+        "upload_session",
+        uploadSession.uploadSessionId,
+        { message: error instanceof Error ? error.message : "Unknown upload error" },
+        "failure",
+        "upload_failed"
+      );
+      addMessage("error", error instanceof Error ? error.message : "Upload failed.");
+    }
+  }
+
+  async function updateUploadStatus(uploadSessionId: string, status: "uploading" | "uploaded" | "failed") {
+    const response = await fetch(`${backendUrl}/api/upload-sessions/${uploadSessionId}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status })
+    });
+
+    if (!response.ok) {
+      addMessage("error", `Failed to update upload status: ${status}`);
+    }
   }
 
   async function appendAuditEvent(
@@ -104,15 +192,18 @@ export function IngestionWorkspace() {
     action: Parameters<typeof createAuditEvent>[0]["action"],
     targetKind: Parameters<typeof createAuditEvent>[0]["target"]["kind"],
     targetId: string,
-    details?: Record<string, string | number | boolean | null>
+    details?: Record<string, string | number | boolean | null>,
+    result: Parameters<typeof createAuditEvent>[0]["result"] = "success",
+    errorCode?: string
   ) {
     const event = createAuditEvent({
       correlationId: eventCorrelationId,
       actor: { kind: "desktop", id: "local-prototype-client" },
       action,
       target: { kind: targetKind, id: targetId },
-      result: "success",
-      details
+      result,
+      details,
+      errorCode
     });
 
     const response = await fetch(`${backendUrl}/api/audit-events`, {
@@ -164,12 +255,12 @@ export function IngestionWorkspace() {
                 onChange={(event) => setBackendUrl(event.target.value)}
               />
             </Grid>
-            <Grid size={{ xs: 12, md: 3 }}>
+            <Grid size={{ xs: 12, md: 2 }}>
               <Button fullWidth variant="contained" size="large" onClick={selectFile}>
                 Select DICOM
               </Button>
             </Grid>
-            <Grid size={{ xs: 12, md: 3 }}>
+            <Grid size={{ xs: 12, md: 2 }}>
               <Button
                 fullWidth
                 variant="outlined"
@@ -177,7 +268,19 @@ export function IngestionWorkspace() {
                 onClick={requestUploadSession}
                 disabled={!selectedFile}
               >
-                Request upload
+                Create session
+              </Button>
+            </Grid>
+            <Grid size={{ xs: 12, md: 2 }}>
+              <Button
+                fullWidth
+                variant="contained"
+                color={uploadStatus === "failed" ? "warning" : "secondary"}
+                size="large"
+                onClick={uploadFile}
+                disabled={!selectedFile || !uploadSession || uploadStatus === "uploading" || uploadStatus === "uploaded"}
+              >
+                {uploadStatus === "failed" ? "Retry upload" : "Upload file"}
               </Button>
             </Grid>
           </Grid>
@@ -207,9 +310,21 @@ export function IngestionWorkspace() {
                 rows={[
                   ["Session ID", uploadSession.uploadSessionId],
                   ["Object", uploadSession.objectName],
-                  ["Expires", uploadSession.expiresAt]
+                  ["Expires", uploadSession.expiresAt],
+                  ["Status", uploadStatus]
                 ]}
               />
+            )}
+            {uploadSession && uploadStatus !== "idle" && (
+              <Box sx={{ mt: 2 }}>
+                <Stack direction="row" sx={{ justifyContent: "space-between", mb: 0.75 }}>
+                  <Typography color="text.secondary" sx={{ fontWeight: 800 }}>
+                    Upload Progress
+                  </Typography>
+                  <Typography color="text.secondary">{uploadProgress}%</Typography>
+                </Stack>
+                <LinearProgress variant="determinate" value={uploadProgress} />
+              </Box>
             )}
           </InfoCard>
         </Grid>

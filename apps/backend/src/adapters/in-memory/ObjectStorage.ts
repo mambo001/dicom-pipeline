@@ -11,7 +11,7 @@ export function makeInMemoryObjectStorage(config: AppConfig): ObjectStorage {
 
       return {
         objectName,
-        signedUploadUrl: `http://localhost:${config.port}/dev-storage/${encodeURIComponent(objectName)}`,
+        signedUploadUrl: `http://localhost:${config.port}/dev-storage?uploadSessionId=${encodeURIComponent(input.uploadSessionId)}&objectName=${encodeURIComponent(objectName)}`,
         expiresAt
       };
     }

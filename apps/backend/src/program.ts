@@ -17,6 +17,27 @@ export function createApp(dependencies: AppDependencies): express.Express {
   const app = express();
 
   app.use(cors());
+
+  app.put("/dev-storage", express.raw({ limit: "2gb", type: "application/dicom" }), async (request, response) => {
+    const uploadSessionId = String(request.query.uploadSessionId ?? "");
+    const objectName = String(request.query.objectName ?? "");
+
+    if (!uploadSessionId || !objectName) {
+      response.status(400).json(apiError("invalid_dev_storage_request", "Upload session and object name are required"));
+      return;
+    }
+
+    const record = await dependencies.storageRecords.get(uploadSessionId);
+
+    if (!record || record.objectName !== objectName) {
+      response.status(404).json(apiError("upload_session_not_found", "Upload session was not found"));
+      return;
+    }
+
+    await dependencies.storageRecords.updateStatus(uploadSessionId, "uploaded");
+    response.status(200).json({ ok: true, bytesReceived: request.body.length });
+  });
+
   app.use(express.json({ limit: "1mb" }));
 
   app.get("/health", (_request, response) => {
