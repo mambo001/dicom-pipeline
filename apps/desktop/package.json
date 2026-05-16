@@ -17,8 +17,7 @@
     "test": "vitest run --passWithNoTests",
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac",
-    "dist:win": "electron-builder --win",
-    "dist:linux": "electron-builder --linux"
+    "dist:win": "electron-builder --win"
   },
   "build": {
     "appId": "com.dicom-pipeline.prototype",
@@ -52,19 +51,6 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
-        }
-      ]
-    },
-    "linux": {
-      "icon": "build/icon.png",
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": ["x64"]
-        },
-        {
-          "target": "deb",
           "arch": ["x64"]
         }
       ]
