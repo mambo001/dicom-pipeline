@@ -57,7 +57,7 @@ jobs:
           APP_ENV: production
           GCS_BUCKET: ${GCP_PROJECT_ID}-dicom
           GCS_SIGNED_URL_TTL_SECONDS: "900"
-          ALLOWED_ORIGINS: "${{ vars.ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,https://viewer.ohif.org,https://dicom-pipeline-backend-wnlvetmltq-uc.a.run.app' }}"
+          ALLOWED_ORIGINS: "${{ vars.ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,https://dicom-pipeline-backend-wnlvetmltq-uc.a.run.app' }}"
           ENVEOF
 
       - name: Deploy backend to Cloud Run
