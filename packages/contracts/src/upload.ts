@@ -1,37 +1,49 @@
-export type UploadSessionStatus = "created" | "uploading" | "uploaded" | "failed";
+import { Schema } from "effect";
 
-export type CreateUploadSessionRequest = {
-  readonly version: 1;
-  readonly kind: "create_upload_session_request";
-  readonly correlationId: string;
-  readonly fileName: string;
-  readonly contentType: "application/dicom";
-  readonly fileSha256?: string;
-  readonly sizeBytes?: number;
-};
+export const UploadSessionStatusSchema = Schema.Literal("created", "uploading", "uploaded", "failed");
 
-export type CreateUploadSessionResponse = {
-  readonly version: 1;
-  readonly kind: "create_upload_session_response";
-  readonly uploadSessionId: string;
-  readonly objectName: string;
-  readonly signedUploadUrl: string;
-  readonly expiresAt: string;
-};
+export const CreateUploadSessionRequestSchema = Schema.Struct({
+  version: Schema.Literal(1),
+  kind: Schema.Literal("create_upload_session_request"),
+  correlationId: Schema.String,
+  fileName: Schema.String,
+  contentType: Schema.Literal("application/dicom"),
+  fileSha256: Schema.optional(Schema.String),
+  sizeBytes: Schema.optional(Schema.Number)
+});
 
-export type StorageObjectRecord = {
-  readonly version: 1;
-  readonly kind: "storage_object_record";
-  readonly uploadSessionId: string;
-  readonly correlationId: string;
-  readonly bucket: string;
-  readonly objectName: string;
-  readonly status: UploadSessionStatus;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly fileSha256?: string;
-  readonly sizeBytes?: number;
-};
+export const CreateUploadSessionResponseSchema = Schema.Struct({
+  version: Schema.Literal(1),
+  kind: Schema.Literal("create_upload_session_response"),
+  uploadSessionId: Schema.String,
+  objectName: Schema.String,
+  signedUploadUrl: Schema.String,
+  expiresAt: Schema.String
+});
+
+export const StorageObjectRecordSchema = Schema.Struct({
+  version: Schema.Literal(1),
+  kind: Schema.Literal("storage_object_record"),
+  uploadSessionId: Schema.String,
+  correlationId: Schema.String,
+  bucket: Schema.String,
+  objectName: Schema.String,
+  status: UploadSessionStatusSchema,
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+  fileSha256: Schema.optional(Schema.String),
+  sizeBytes: Schema.optional(Schema.Number)
+});
+
+export const UploadStatusUpdateSchema = Schema.Struct({
+  status: UploadSessionStatusSchema
+});
+
+export type UploadSessionStatus = Schema.Schema.Type<typeof UploadSessionStatusSchema>;
+export type CreateUploadSessionRequest = Schema.Schema.Type<typeof CreateUploadSessionRequestSchema>;
+export type CreateUploadSessionResponse = Schema.Schema.Type<typeof CreateUploadSessionResponseSchema>;
+export type StorageObjectRecord = Schema.Schema.Type<typeof StorageObjectRecordSchema>;
+export type UploadStatusUpdate = Schema.Schema.Type<typeof UploadStatusUpdateSchema>;
 
 export function createUploadSessionRequest(
   input: Omit<CreateUploadSessionRequest, "version" | "kind" | "contentType"> & {

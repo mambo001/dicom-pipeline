@@ -1,28 +1,34 @@
-export type DicomMetadataSummary = {
-  readonly patientName?: string;
-  readonly patientId?: string;
-  readonly patientBirthDate?: string;
-  readonly studyInstanceUid?: string;
-  readonly seriesInstanceUid?: string;
-  readonly sopInstanceUid?: string;
-  readonly modality?: string;
-  readonly studyDate?: string;
-  readonly rows?: number;
-  readonly columns?: number;
-};
+import { Schema } from "effect";
 
-export type DeidentificationFinding = {
-  readonly tag: string;
-  readonly name: string;
-  readonly action: "removed" | "replaced" | "retained";
-};
+export const DicomMetadataSummarySchema = Schema.Struct({
+  patientName: Schema.optional(Schema.String),
+  patientId: Schema.optional(Schema.String),
+  patientBirthDate: Schema.optional(Schema.String),
+  studyInstanceUid: Schema.optional(Schema.String),
+  seriesInstanceUid: Schema.optional(Schema.String),
+  sopInstanceUid: Schema.optional(Schema.String),
+  modality: Schema.optional(Schema.String),
+  studyDate: Schema.optional(Schema.String),
+  rows: Schema.optional(Schema.Number),
+  columns: Schema.optional(Schema.Number)
+});
 
-export type DeidentificationReport = {
-  readonly version: 1;
-  readonly kind: "deidentification_report";
-  readonly rulesetId: string;
-  readonly findings: readonly DeidentificationFinding[];
-};
+export const DeidentificationFindingSchema = Schema.Struct({
+  tag: Schema.String,
+  name: Schema.String,
+  action: Schema.Literal("removed", "replaced", "retained")
+});
+
+export const DeidentificationReportSchema = Schema.Struct({
+  version: Schema.Literal(1),
+  kind: Schema.Literal("deidentification_report"),
+  rulesetId: Schema.String,
+  findings: Schema.Array(DeidentificationFindingSchema)
+});
+
+export type DicomMetadataSummary = Schema.Schema.Type<typeof DicomMetadataSummarySchema>;
+export type DeidentificationFinding = Schema.Schema.Type<typeof DeidentificationFindingSchema>;
+export type DeidentificationReport = Schema.Schema.Type<typeof DeidentificationReportSchema>;
 
 export function createDeidentificationReport(
   input: Omit<DeidentificationReport, "version" | "kind">
