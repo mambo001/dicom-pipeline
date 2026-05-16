@@ -6,10 +6,9 @@ type DicomDesktopApi = {
   readonly readDicomFile: (filePath: string) => Promise<{ readonly name: string; readonly data: ArrayBuffer }>;
 };
 
-type SelectedDicomFile = {
-  readonly path: string;
-  readonly sizeBytes: number;
-};
+export type DicomImageSource =
+  | { readonly type: "local"; readonly path: string; readonly sizeBytes: number }
+  | { readonly type: "url"; readonly url: string };
 
 export type CornerstoneViewerStatus = "idle" | "loading" | "rendered" | "failed";
 
@@ -32,11 +31,15 @@ function ensureCornerstoneReady(): Promise<void> {
   return cornerstoneReady;
 }
 
-async function createDicomImageId(selectedFile: SelectedDicomFile): Promise<string> {
-  const file = await getDesktopApi().readDicomFile(selectedFile.path);
+async function createDicomImageId(source: DicomImageSource): Promise<string> {
+  if (source.type === "url") {
+    return `wadouri:${source.url}`;
+  }
 
-  if (file.data.byteLength !== selectedFile.sizeBytes) {
-    throw new Error(`Read ${file.data.byteLength} bytes, expected ${selectedFile.sizeBytes} bytes.`);
+  const file = await getDesktopApi().readDicomFile(source.path);
+
+  if (file.data.byteLength !== source.sizeBytes) {
+    throw new Error(`Read ${file.data.byteLength} bytes, expected ${source.sizeBytes} bytes.`);
   }
 
   const bytes = new Uint8Array(file.data);
@@ -52,7 +55,7 @@ async function prefetchImageMetadata(imageId: string): Promise<void> {
   await dicomImageLoader.wadouri.loadImage(imageId).promise;
 }
 
-export function useCornerstoneDicomViewer(selectedFile: SelectedDicomFile | undefined) {
+export function useCornerstoneDicomViewer(imageSource: DicomImageSource | undefined) {
   const elementRef = useRef<HTMLDivElement | null>(null);
   const renderingEngineRef = useRef<RenderingEngine | null>(null);
   const [status, setStatus] = useState<CornerstoneViewerStatus>("idle");
@@ -60,14 +63,14 @@ export function useCornerstoneDicomViewer(selectedFile: SelectedDicomFile | unde
 
   useEffect(() => {
     const element = elementRef.current;
-    if (!element || !selectedFile) {
+    if (!element || !imageSource) {
       setStatus("idle");
       return;
     }
 
     let cancelled = false;
 
-    const renderSelectedFile = async () => {
+    const renderImage = async () => {
       setStatus("loading");
       setError(undefined);
 
@@ -75,7 +78,7 @@ export function useCornerstoneDicomViewer(selectedFile: SelectedDicomFile | unde
         await ensureCornerstoneReady();
         if (cancelled) return;
 
-        const imageId = await createDicomImageId(selectedFile);
+        const imageId = await createDicomImageId(imageSource);
         if (cancelled) return;
 
         await prefetchImageMetadata(imageId);
@@ -89,6 +92,7 @@ export function useCornerstoneDicomViewer(selectedFile: SelectedDicomFile | unde
 
         renderingEngine.resize(true, true);
         viewport.render();
+
         setStatus("rendered");
       } catch (caught) {
         if (!cancelled) {
@@ -98,12 +102,12 @@ export function useCornerstoneDicomViewer(selectedFile: SelectedDicomFile | unde
       }
     };
 
-    void renderSelectedFile();
+    void renderImage();
 
     return () => {
       cancelled = true;
     };
-  }, [selectedFile]);
+  }, [imageSource]);
 
   useEffect(() => {
     return () => {
