@@ -104,13 +104,16 @@ export type IngestionState = {
   readonly uploadProgress: number;
   readonly auditEvents: readonly AuditEvent[];
   readonly messages: readonly WorkflowMessage[];
+  readonly viewerSource: "local" | "uploaded";
+  readonly signedReadUrl: string | undefined;
 
   readonly setBackendUrl: (url: string) => void;
   readonly persistBackendUrl: () => void;
   readonly selectFile: () => Promise<void>;
   readonly requestUploadSession: () => Promise<void>;
   readonly uploadFile: () => Promise<void>;
-  readonly openOhifViewer: () => void;
+  readonly setViewerSource: (source: "local" | "uploaded") => void;
+  readonly loadSignedReadUrl: () => Promise<void>;
   readonly refreshTraceability: () => Promise<void>;
 };
 
@@ -128,6 +131,8 @@ export const useIngestionStore = create<IngestionState>((set, get) => ({
   uploadProgress: 0,
   auditEvents: [],
   messages: [],
+  viewerSource: "local" as const,
+  signedReadUrl: undefined,
 
   setBackendUrl: (url: string) => {
     const validated = validateUnknown(BackendUrlSchema, url);
@@ -162,7 +167,9 @@ export const useIngestionStore = create<IngestionState>((set, get) => ({
       storageRecord: undefined,
       uploadStatus: "idle" as UploadStatus,
       uploadProgress: 0,
-      auditEvents: []
+      auditEvents: [],
+      viewerSource: "local" as const,
+      signedReadUrl: undefined
     });
     addMessage(set, "success", `Selected ${file.name}`);
 
@@ -272,17 +279,30 @@ export const useIngestionStore = create<IngestionState>((set, get) => ({
     }
   },
 
-  openOhifViewer: () => {
+  setViewerSource: (source: "local" | "uploaded") => {
+    set({ viewerSource: source });
+  },
+
+  loadSignedReadUrl: async () => {
     const { backendUrl, uploadSession, uploadStatus } = get();
     if (!uploadSession || uploadStatus !== "uploaded") {
-      addMessage(set, "error", "Upload a DICOM file before opening OHIF.");
+      addMessage(set, "error", "Upload a DICOM file before viewing.");
       return;
     }
 
-    const manifestUrl = `${backendUrl}/api/ohif/upload-sessions/${uploadSession.uploadSessionId}.json`;
-    const viewerUrl = `https://viewer.ohif.org/viewer/dicomjson?url=${encodeURIComponent(manifestUrl)}`;
-    window.open(viewerUrl, "_blank", "noopener,noreferrer");
-    addMessage(set, "info", "Opened OHIF viewer with a DICOM JSON manifest.");
+    const response = await fetch(`${backendUrl}/api/upload-sessions/${uploadSession.uploadSessionId}/signed-read`);
+    if (!response.ok) {
+      addMessage(set, "error", "Failed to get signed read URL for uploaded file.");
+      return;
+    }
+
+    const body = await response.json();
+    if (typeof body.signedReadUrl === "string") {
+      set({ signedReadUrl: body.signedReadUrl, viewerSource: "uploaded" });
+      addMessage(set, "info", "Loaded uploaded file into viewer.");
+    } else {
+      addMessage(set, "error", "Invalid signed read URL response.");
+    }
   },
 
   refreshTraceability: async () => {
