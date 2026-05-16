@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Enums, RenderingEngine, StackViewport, init as initCornerstone, setUseCPURendering } from "@cornerstonejs/core";
+import { Enums, RenderingEngine, StackViewport, init as initCornerstone } from "@cornerstonejs/core";
 import dicomImageLoader, { init as initDicomImageLoader } from "@cornerstonejs/dicom-image-loader";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
@@ -21,7 +21,6 @@ function getDesktopApi(): DicomDesktopApi {
 function ensureCornerstoneReady(): Promise<void> {
   if (!cornerstoneReady) {
     cornerstoneReady = (async () => {
-      setUseCPURendering(true);
       await initCornerstone();
       initDicomImageLoader({ maxWebWorkers: 1 });
     })();
@@ -41,7 +40,7 @@ export function DicomViewerCard() {
 
   useEffect(() => {
     const element = cornerstoneElementRef.current;
-    if (!element || !selectedFile || !dicomInspection?.isDicom) {
+    if (!element || !selectedFile) {
       setCornerstoneStatus("idle");
       return;
     }
@@ -71,12 +70,13 @@ export function DicomViewerCard() {
 
         const viewport = renderingEngine.getViewport(viewportId) as StackViewport;
         await viewport.setStack([imageId]);
+        renderingEngine.resize(true, true);
         viewport.render();
         renderingEngineRef.current = renderingEngine;
         setCornerstoneStatus("rendered");
       } catch (error) {
         setCornerstoneStatus("failed");
-        setCornerstoneError(error instanceof Error ? error.message : "Cornerstone could not render this DICOM file.");
+        setCornerstoneError(formatCornerstoneError(error));
       }
     };
 
@@ -87,7 +87,7 @@ export function DicomViewerCard() {
       renderingEngineRef.current?.destroy();
       renderingEngineRef.current = undefined;
     };
-  }, [selectedFile, dicomInspection?.isDicom]);
+  }, [selectedFile]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -113,7 +113,7 @@ export function DicomViewerCard() {
 
   return (
     <InfoCard title="DICOM Viewer" emptyText="Select a DICOM file to render a preview.">
-      {dicomInspection && (
+      {selectedFile && (
         <Stack spacing={2}>
           <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
             <Chip
@@ -187,11 +187,32 @@ export function DicomViewerCard() {
             </>
           ) : !preview ? (
             <Typography color="text.secondary">
-              This prototype renders uncompressed single-frame grayscale DICOM pixel data. Metadata and de-identification inspection still work when pixel preview is unavailable.
+              The lightweight fallback only supports uncompressed single-frame grayscale pixel data. Cornerstone rendering can still work for compressed, color, or multi-frame files even when this fallback is unavailable.
             </Typography>
           ) : null}
         </Stack>
       )}
     </InfoCard>
   );
+}
+
+function formatCornerstoneError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "object" && error) {
+    const nestedError = "error" in error ? (error as { readonly error?: unknown }).error : undefined;
+    if (nestedError) {
+      return formatCornerstoneError(nestedError);
+    }
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Cornerstone could not render this DICOM file.";
+    }
+  }
+
+  return typeof error === "string" ? error : "Cornerstone could not render this DICOM file.";
 }
