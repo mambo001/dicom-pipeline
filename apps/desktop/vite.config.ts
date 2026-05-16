@@ -17,6 +17,16 @@ export default defineConfig({
   worker: {
     format: "es"
   },
+  optimizeDeps: {
+    exclude: ["@cornerstonejs/dicom-image-loader"],
+    include: [
+      "dicom-parser",
+      "@cornerstonejs/codec-charls/decodewasmjs",
+      "@cornerstonejs/codec-libjpeg-turbo-8bit/decodewasmjs",
+      "@cornerstonejs/codec-openjpeg/decodewasmjs",
+      "@cornerstonejs/codec-openjph/wasmjs"
+    ]
+  },
   server: {
     port: 5173
   }
