@@ -60,4 +60,7 @@ jobs:
             --image="$IMAGE" \
             --service-account="dicom-pipeline-backend@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
             --allow-unauthenticated \
-            --set-env-vars="APP_ENV=production,GCS_BUCKET=${GCP_PROJECT_ID}-dicom,GCS_SIGNED_URL_TTL_SECONDS=900,ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS || 'http://localhost:5173' }}"
+            --update-env-vars="APP_ENV=production" \
+            --update-env-vars="GCS_BUCKET=${GCP_PROJECT_ID}-dicom" \
+            --update-env-vars="GCS_SIGNED_URL_TTL_SECONDS=900" \
+            --update-env-vars="ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS || 'http://localhost:5173' }}"
