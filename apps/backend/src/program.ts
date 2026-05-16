@@ -73,6 +73,17 @@ export function createApp(dependencies: AppDependencies): express.Express {
     response.status(201).json(uploadSession);
   });
 
+  app.get("/api/upload-sessions/:uploadSessionId", async (request, response) => {
+    const record = await dependencies.storageRecords.get(request.params.uploadSessionId);
+
+    if (!record) {
+      response.status(404).json(apiError("upload_session_not_found", "Upload session was not found"));
+      return;
+    }
+
+    response.json(record);
+  });
+
   app.post("/api/upload-sessions/:uploadSessionId/status", async (request, response) => {
     const status = request.body?.status as unknown;
 

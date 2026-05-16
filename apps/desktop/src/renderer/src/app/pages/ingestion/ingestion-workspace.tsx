@@ -16,9 +16,11 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { alpha } from "@mui/material/styles";
 import {
-  createAuditEvent,
-  createUploadSessionRequest,
-  type CreateUploadSessionResponse
+  type AuditEvent,
+  type CreateUploadSessionResponse,
+  type DeidentificationReport,
+  type DicomMetadataSummary,
+  type StorageObjectRecord
 } from "@dicom-pipeline/contracts";
 
 type SelectedDicomFile = {
@@ -30,6 +32,7 @@ type SelectedDicomFile = {
 
 type DicomDesktopApi = {
   readonly selectDicomFile: () => Promise<SelectedDicomFile | undefined>;
+  readonly inspectDicomFile: (filePath: string) => Promise<DicomInspection>;
   readonly uploadDicomFile: (
     input: {
       readonly uploadId: string;
@@ -39,6 +42,13 @@ type DicomDesktopApi = {
     },
     onProgress: (progress: { readonly uploadedBytes: number; readonly totalBytes: number }) => void
   ) => Promise<{ readonly ok: boolean; readonly statusCode: number; readonly responseBody: string }>;
+};
+
+type DicomInspection = {
+  readonly isDicom: boolean;
+  readonly metadata: DicomMetadataSummary;
+  readonly deidentificationReport: DeidentificationReport;
+  readonly warnings: readonly string[];
 };
 
 function getDesktopApi(): DicomDesktopApi {
@@ -56,9 +66,12 @@ export function IngestionWorkspace() {
   const [backendUrl, setBackendUrl] = useState("http://localhost:8080");
   const [correlationId, setCorrelationId] = useState(() => crypto.randomUUID());
   const [selectedFile, setSelectedFile] = useState<SelectedDicomFile>();
+  const [dicomInspection, setDicomInspection] = useState<DicomInspection>();
   const [uploadSession, setUploadSession] = useState<CreateUploadSessionResponse>();
+  const [storageRecord, setStorageRecord] = useState<StorageObjectRecord>();
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [auditEvents, setAuditEvents] = useState<readonly AuditEvent[]>([]);
   const [messages, setMessages] = useState<readonly WorkflowMessage[]>([]);
 
   async function selectFile() {
@@ -71,15 +84,53 @@ export function IngestionWorkspace() {
     const nextCorrelationId = crypto.randomUUID();
     setCorrelationId(nextCorrelationId);
     setSelectedFile(file);
+    setDicomInspection(undefined);
     setUploadSession(undefined);
+    setStorageRecord(undefined);
     setUploadStatus("idle");
     setUploadProgress(0);
+    setAuditEvents([]);
     addMessage("success", `Selected ${file.name}`);
 
     await appendAuditEvent(nextCorrelationId, "dicom.file.selected", "local_file", file.sha256, {
       fileName: file.name,
       sizeBytes: file.sizeBytes
     });
+
+    await inspectSelectedFile(file, nextCorrelationId);
+  }
+
+  async function inspectSelectedFile(file: SelectedDicomFile, nextCorrelationId: string) {
+    try {
+      const inspection = await getDesktopApi().inspectDicomFile(file.path);
+      setDicomInspection(inspection);
+
+      if (!inspection.isDicom) {
+        addMessage("error", "File does not look like a parseable DICOM dataset.");
+        return;
+      }
+
+      await appendAuditEvent(nextCorrelationId, "dicom.metadata.parsed", "local_file", file.sha256, {
+        modality: inspection.metadata.modality ?? null,
+        studyInstanceUid: inspection.metadata.studyInstanceUid ?? null,
+        phiFindingCount: inspection.deidentificationReport.findings.length
+      });
+
+      if (inspection.deidentificationReport.findings.length > 0) {
+        await appendAuditEvent(nextCorrelationId, "dicom.phi.detected", "local_file", file.sha256, {
+          findingCount: inspection.deidentificationReport.findings.length,
+          rulesetId: inspection.deidentificationReport.rulesetId
+        });
+      }
+
+      await appendAuditEvent(nextCorrelationId, "dicom.deidentified", "local_file", file.sha256, {
+        mode: "preview_only",
+        rulesetId: inspection.deidentificationReport.rulesetId
+      });
+      addMessage("success", "DICOM metadata inspected and de-identification preview generated.");
+    } catch (error) {
+      addMessage("error", error instanceof Error ? error.message : "DICOM inspection failed.");
+    }
   }
 
   async function requestUploadSession() {
@@ -96,12 +147,15 @@ export function IngestionWorkspace() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
-        createUploadSessionRequest({
+        {
+          version: 1,
+          kind: "create_upload_session_request",
           correlationId,
           fileName: selectedFile.name,
+          contentType: "application/dicom",
           fileSha256: selectedFile.sha256,
           sizeBytes: selectedFile.sizeBytes
-        })
+        }
       )
     });
 
@@ -112,6 +166,7 @@ export function IngestionWorkspace() {
 
     const session = (await response.json()) as CreateUploadSessionResponse;
     setUploadSession(session);
+    await loadStorageRecord(session.uploadSessionId);
     setUploadStatus("idle");
     setUploadProgress(0);
     addMessage("success", "Upload session created with signed storage URL.");
@@ -184,19 +239,60 @@ export function IngestionWorkspace() {
 
     if (!response.ok) {
       addMessage("error", `Failed to update upload status: ${status}`);
+      return;
+    }
+
+    const record = (await response.json()) as StorageObjectRecord;
+    setStorageRecord(record);
+  }
+
+  async function loadStorageRecord(uploadSessionId: string) {
+    const response = await fetch(`${backendUrl}/api/upload-sessions/${uploadSessionId}`);
+
+    if (!response.ok) {
+      addMessage("error", "Failed to load upload session status.");
+      return;
+    }
+
+    const record = (await response.json()) as StorageObjectRecord;
+    setStorageRecord(record);
+    setUploadStatus(record.status === "created" ? "idle" : record.status);
+  }
+
+  async function loadAuditEvents() {
+    const response = await fetch(`${backendUrl}/api/audit-events/${correlationId}`);
+
+    if (!response.ok) {
+      addMessage("error", "Failed to load audit timeline.");
+      return;
+    }
+
+    const body = (await response.json()) as { readonly events: readonly AuditEvent[] };
+    setAuditEvents(body.events);
+  }
+
+  async function refreshTraceability() {
+    await loadAuditEvents();
+
+    if (uploadSession) {
+      await loadStorageRecord(uploadSession.uploadSessionId);
     }
   }
 
   async function appendAuditEvent(
     eventCorrelationId: string,
-    action: Parameters<typeof createAuditEvent>[0]["action"],
-    targetKind: Parameters<typeof createAuditEvent>[0]["target"]["kind"],
+    action: AuditEvent["action"],
+    targetKind: AuditEvent["target"]["kind"],
     targetId: string,
     details?: Record<string, string | number | boolean | null>,
-    result: Parameters<typeof createAuditEvent>[0]["result"] = "success",
+    result: AuditEvent["result"] = "success",
     errorCode?: string
   ) {
-    const event = createAuditEvent({
+    const event: AuditEvent = {
+      version: 1,
+      kind: "audit_event",
+      eventId: crypto.randomUUID(),
+      occurredAt: new Date().toISOString(),
       correlationId: eventCorrelationId,
       actor: { kind: "desktop", id: "local-prototype-client" },
       action,
@@ -204,7 +300,7 @@ export function IngestionWorkspace() {
       result,
       details,
       errorCode
-    });
+    };
 
     const response = await fetch(`${backendUrl}/api/audit-events`, {
       method: "POST",
@@ -214,6 +310,13 @@ export function IngestionWorkspace() {
 
     if (!response.ok) {
       addMessage("error", `Failed to write audit event: ${action}`);
+      return;
+    }
+
+    const appended = (await response.json()) as AuditEvent;
+
+    if (appended.correlationId === correlationId || appended.correlationId === eventCorrelationId) {
+      setAuditEvents((current) => [...current, appended]);
     }
   }
 
@@ -311,7 +414,8 @@ export function IngestionWorkspace() {
                   ["Session ID", uploadSession.uploadSessionId],
                   ["Object", uploadSession.objectName],
                   ["Expires", uploadSession.expiresAt],
-                  ["Status", uploadStatus]
+                  ["UI Status", uploadStatus],
+                  ["Stored Status", storageRecord?.status ?? "not loaded"]
                 ]}
               />
             )}
@@ -325,6 +429,53 @@ export function IngestionWorkspace() {
                 </Stack>
                 <LinearProgress variant="determinate" value={uploadProgress} />
               </Box>
+            )}
+          </InfoCard>
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <InfoCard title="DICOM Metadata" emptyText="Select a DICOM file to inspect metadata.">
+            {dicomInspection && (
+              <Stack spacing={2}>
+                <Chip
+                  size="small"
+                  label={dicomInspection.isDicom ? "Parseable DICOM" : "DICOM not confirmed"}
+                  color={dicomInspection.isDicom ? "success" : "warning"}
+                  sx={{ alignSelf: "flex-start" }}
+                />
+                <Details rows={metadataRows(dicomInspection.metadata)} />
+                {dicomInspection.warnings.map((warning) => (
+                  <Typography key={warning} color="warning.main">
+                    {warning}
+                  </Typography>
+                ))}
+              </Stack>
+            )}
+          </InfoCard>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <InfoCard title="De-Identification Preview" emptyText="Metadata inspection will generate a de-id preview.">
+            {dicomInspection && (
+              <Stack spacing={2}>
+                <Details rows={[["Ruleset", dicomInspection.deidentificationReport.rulesetId]]} />
+                <List disablePadding>
+                  {dicomInspection.deidentificationReport.findings.length === 0 ? (
+                    <ListItem disableGutters>
+                      <ListItemText primary="No configured PHI tags found." />
+                    </ListItem>
+                  ) : (
+                    dicomInspection.deidentificationReport.findings.map((finding) => (
+                      <ListItem key={`${finding.tag}-${finding.name}`} disableGutters>
+                        <Chip size="small" label={finding.action} sx={{ mr: 1.5, minWidth: 76 }} />
+                        <ListItemText primary={finding.name} secondary={finding.tag} />
+                      </ListItem>
+                    ))
+                  )}
+                </List>
+              </Stack>
             )}
           </InfoCard>
         </Grid>
@@ -358,8 +509,56 @@ export function IngestionWorkspace() {
           </List>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardContent>
+          <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+            <Typography variant="h2">Audit Timeline</Typography>
+            <Button variant="outlined" size="small" onClick={refreshTraceability} disabled={!selectedFile}>
+              Refresh trace
+            </Button>
+          </Stack>
+          <Divider />
+          <List disablePadding>
+            {auditEvents.length === 0 ? (
+              <ListItem disableGutters>
+                <ListItemText primary="No persisted audit events loaded." />
+              </ListItem>
+            ) : (
+              auditEvents.map((event) => (
+                <ListItem key={event.eventId} disableGutters>
+                  <Chip
+                    size="small"
+                    label={event.result}
+                    color={event.result === "success" ? "success" : "error"}
+                    sx={{ mr: 1.5, minWidth: 72 }}
+                  />
+                  <ListItemText
+                    primary={event.action}
+                    secondary={`${event.occurredAt} | ${event.target.kind}: ${event.target.id}`}
+                  />
+                </ListItem>
+              ))
+            )}
+          </List>
+        </CardContent>
+      </Card>
     </Stack>
   );
+}
+
+function metadataRows(metadata: DicomMetadataSummary): readonly (readonly [string, string])[] {
+  return [
+    ["Patient", metadata.patientName ?? "not present"],
+    ["Patient ID", metadata.patientId ?? "not present"],
+    ["Birth Date", metadata.patientBirthDate ?? "not present"],
+    ["Modality", metadata.modality ?? "not present"],
+    ["Study Date", metadata.studyDate ?? "not present"],
+    ["Study UID", metadata.studyInstanceUid ?? "not present"],
+    ["Series UID", metadata.seriesInstanceUid ?? "not present"],
+    ["SOP UID", metadata.sopInstanceUid ?? "not present"],
+    ["Image Size", metadata.rows && metadata.columns ? `${metadata.columns} x ${metadata.rows}` : "not present"]
+  ];
 }
 
 function InfoCard(props: {
