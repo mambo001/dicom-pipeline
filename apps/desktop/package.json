@@ -18,6 +18,9 @@
   },
   "dependencies": {
     "@dicom-pipeline/contracts": "0.1.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^9.0.1",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^35.2.0",
     "react": "^19.1.0",
