@@ -103,7 +103,7 @@ ipcMain.handle("dicom:select-file", async (): Promise<SelectedDicomFile | undefi
   const result = await dialog.showOpenDialog({
     title: "Select DICOM file",
     properties: ["openFile"],
-    filters: [{ name: "DICOM", extensions: ["dcm", "dicom", "*"] }]
+    filters: [{ name: "DICOM", extensions: ["dcm", "dicom"] }]
   });
 
   if (result.canceled || result.filePaths.length === 0) {
