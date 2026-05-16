@@ -3,6 +3,7 @@ export type AppConfig = {
   readonly appEnv: "development" | "production";
   readonly gcsBucket: string;
   readonly signedUrlTtlSeconds: number;
+  readonly allowedOrigins: string;
 };
 
 export function readConfig(env: NodeJS.ProcessEnv): AppConfig {
@@ -22,6 +23,7 @@ export function readConfig(env: NodeJS.ProcessEnv): AppConfig {
     port,
     appEnv,
     gcsBucket: env.GCS_BUCKET ?? "dicom-pipeline-prototype-dev",
-    signedUrlTtlSeconds
+    signedUrlTtlSeconds,
+    allowedOrigins: env.ALLOWED_ORIGINS ?? "http://localhost:5173"
   };
 }

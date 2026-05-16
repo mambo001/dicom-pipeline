@@ -9,7 +9,7 @@ const dependencies =
     ? makeProductionDependencies(config)
     : makeDevelopmentDependencies(config);
 
-const app = createApp(dependencies, config.appEnv);
+const app = createApp(dependencies, config.appEnv, config.allowedOrigins);
 
 app.listen(config.port, () => {
   console.info(

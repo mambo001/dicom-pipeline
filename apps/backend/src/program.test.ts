@@ -7,7 +7,8 @@ const config = {
   port: 8080,
   appEnv: "development" as const,
   gcsBucket: "dev-bucket",
-  signedUrlTtlSeconds: 900
+  signedUrlTtlSeconds: 900,
+  allowedOrigins: "http://localhost:5173"
 };
 
 describe("createApp", () => {
@@ -109,6 +110,14 @@ describe("createApp", () => {
 
     expect(statusAfterUpload.status).toBe(200);
     expect(await statusAfterUpload.json()).toMatchObject({ status: "uploaded" });
+  });
+
+  it("allows CORS from allowed origin", async () => {
+    const response = await fetch(`${baseUrl}/health`, {
+      headers: { Origin: "http://localhost:5173" }
+    });
+
+    expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
   });
 
   it("rejects invalid upload session requests", async () => {

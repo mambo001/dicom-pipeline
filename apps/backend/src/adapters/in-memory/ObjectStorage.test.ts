@@ -7,7 +7,8 @@ describe("makeInMemoryObjectStorage", () => {
       port: 8080,
       appEnv: "development",
       gcsBucket: "dev-bucket",
-      signedUrlTtlSeconds: 900
+      signedUrlTtlSeconds: 900,
+      allowedOrigins: "http://localhost:5173"
     });
 
     const signedUpload = await storage.createSignedUpload({

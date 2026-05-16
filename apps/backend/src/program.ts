@@ -30,10 +30,10 @@ const sessionReadLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit:
 const statusUpdateLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 30, standardHeaders: true, legacyHeaders: false });
 const defaultLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 100, standardHeaders: true, legacyHeaders: false });
 
-export function createApp(dependencies: AppDependencies, appEnv: "development" | "production" = "development"): express.Express {
+export function createApp(dependencies: AppDependencies, appEnv: "development" | "production" = "development", allowedOrigins = "http://localhost:5173"): express.Express {
   const app = express();
 
-  app.use(cors());
+  app.use(cors({ origin: allowedOrigins.split(","), maxAge: 86400 }));
   app.use(defaultLimiter);
 
   if (appEnv === "development") {
