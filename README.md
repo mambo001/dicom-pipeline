@@ -7,7 +7,7 @@ It is intentionally implemented with plain TypeScript and clear process boundari
 ## What It Demonstrates
 
 - Electron desktop ingestion client with local DICOM file selection.
-- Local DICOM metadata and pixel preview extraction in the Electron main process.
+- Local DICOM metadata extraction in the Electron main process and DICOM image rendering with Cornerstone.js in the React renderer.
 - De-identification preview for common PHI-bearing tags.
 - Backend upload session API with time-limited Google Cloud Storage signed URLs.
 - Direct-to-storage upload flow so file bytes do not pass through the backend API.
@@ -172,7 +172,7 @@ Current UI features:
 - Known backend defaults for local development and the deployed Cloud Run demo.
 - Buttons disabled until the backend URL is valid.
 - DICOM file picker restricted to `.dcm` and `.dicom` extensions.
-- DICOM viewer card that renders uncompressed single-frame grayscale pixel data to a React canvas.
+- DICOM viewer card that uses Cornerstone.js for primary rendering and a lightweight canvas preview as a fallback for supported grayscale images.
 - Workflow log and audit timeline rendered with virtualized lists.
 - Upload session, selected file, DICOM metadata, and de-identification summary cards.
 
@@ -311,7 +311,7 @@ The backend and contracts packages include Vitest coverage for contract factorie
 ## Security Notes
 
 - This is a portfolio/demo prototype, not a production medical device or compliance-certified system.
-- The viewer is a lightweight prototype for uncompressed single-frame grayscale DICOMs, not a diagnostic viewer.
+- The viewer uses Cornerstone.js for DICOM display, but remains a prototype viewer and is not intended for diagnostic interpretation.
 - File bytes are uploaded directly from Electron to object storage via a time-limited signed URL.
 - The backend stores metadata and audit/session state, not the file payload itself.
 - The current audit and session adapters are suitable for demonstration and tests; production would need durable database-backed adapters.

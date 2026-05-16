@@ -25,6 +25,11 @@ type UploadDicomFileResult = {
   readonly responseBody: string;
 };
 
+type ReadDicomFileResult = {
+  readonly name: string;
+  readonly data: ArrayBuffer;
+};
+
 type DicomMetadataSummary = {
   readonly patientName?: string;
   readonly patientId?: string;
@@ -71,6 +76,7 @@ type DicomInspection = {
 export type DesktopApi = {
   readonly selectDicomFile: () => Promise<SelectedDicomFile | undefined>;
   readonly inspectDicomFile: (filePath: string) => Promise<DicomInspection>;
+  readonly readDicomFile: (filePath: string) => Promise<ReadDicomFileResult>;
   readonly uploadDicomFile: (
     input: UploadDicomFileInput,
     onProgress: (progress: UploadProgress) => void
@@ -80,6 +86,7 @@ export type DesktopApi = {
 const api: DesktopApi = {
   selectDicomFile: () => ipcRenderer.invoke("dicom:select-file") as Promise<SelectedDicomFile | undefined>,
   inspectDicomFile: (filePath) => ipcRenderer.invoke("dicom:inspect-file", filePath) as Promise<DicomInspection>,
+  readDicomFile: (filePath) => ipcRenderer.invoke("dicom:read-file", filePath) as Promise<ReadDicomFileResult>,
   uploadDicomFile: async (input, onProgress) => {
     const channel = `dicom:upload-progress:${input.uploadId}`;
     const listener = (_event: Electron.IpcRendererEvent, progress: UploadProgress) => onProgress(progress);

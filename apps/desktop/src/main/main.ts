@@ -29,6 +29,11 @@ type UploadDicomFileResult = {
   readonly responseBody: string;
 };
 
+type ReadDicomFileResult = {
+  readonly name: string;
+  readonly data: ArrayBuffer;
+};
+
 type DicomMetadataSummary = {
   readonly patientName?: string;
   readonly patientId?: string;
@@ -143,6 +148,14 @@ ipcMain.handle("dicom:select-file", async (): Promise<SelectedDicomFile | undefi
 ipcMain.handle("dicom:inspect-file", async (_event, filePath: string): Promise<DicomInspection> => {
   const contents = await readFile(filePath);
   return inspectDicom(contents);
+});
+
+ipcMain.handle("dicom:read-file", async (_event, filePath: string): Promise<ReadDicomFileResult> => {
+  const contents = await readFile(filePath);
+  return {
+    name: basename(filePath),
+    data: contents.buffer.slice(contents.byteOffset, contents.byteOffset + contents.byteLength) as ArrayBuffer
+  };
 });
 
 ipcMain.handle("dicom:upload-file", async (event, input: UploadDicomFileInput): Promise<UploadDicomFileResult> => {
