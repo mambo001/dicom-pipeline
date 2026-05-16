@@ -64,6 +64,8 @@ resource "google_service_account" "backend" {
   project      = var.gcp_project_id
   account_id   = "dicom-pipeline-backend"
   display_name = "DICOM Pipeline Backend Cloud Run Service Account"
+
+  depends_on = [google_project_service.iam]
 }
 
 resource "google_service_account_iam_member" "backend_act_as" {
