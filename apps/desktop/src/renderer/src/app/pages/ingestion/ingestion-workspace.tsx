@@ -53,11 +53,17 @@ export function IngestionWorkspace() {
           borderColor: alpha(theme.palette.common.white, 0.16)
         })}
       >
-        <CardContent sx={{ py: 2, px: { xs: 2, md: 3 }, "&:last-child": { pb: 2 } }}>
-          <Typography variant="overline" color="info.main" sx={{ lineHeight: 1.4 }}>
-            Medical Imaging Ingestion
-          </Typography>
-          <Typography variant="h3">DICOM intake, audit, and cloud upload</Typography>
+        <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+          <Stack spacing={2} sx={{ maxWidth: 820 }}>
+            <Typography variant="overline" color="info.main">
+              Medical Imaging Ingestion
+            </Typography>
+            <Typography variant="h1">DICOM intake, audit, and cloud upload.</Typography>
+            <Typography sx={{ color: "rgba(255,255,255,0.78)", maxWidth: 680 }}>
+              Select a local DICOM file, write audit events, and request a signed upload session
+              for cloud-native storage.
+            </Typography>
+          </Stack>
         </CardContent>
       </Card>
 
