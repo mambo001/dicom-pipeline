@@ -24,6 +24,6 @@ export function readConfig(env: NodeJS.ProcessEnv): AppConfig {
     appEnv,
     gcsBucket: env.GCS_BUCKET ?? "dicom-pipeline-prototype-dev",
     signedUrlTtlSeconds,
-    allowedOrigins: env.ALLOWED_ORIGINS ?? "http://localhost:5173,http://127.0.0.1:5173"
+    allowedOrigins: env.ALLOWED_ORIGINS ?? "http://localhost:5173,http://127.0.0.1:5173,https://viewer.ohif.org"
   };
 }

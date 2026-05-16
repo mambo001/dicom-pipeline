@@ -41,6 +41,13 @@ resource "google_storage_bucket" "dicom" {
       type = "Delete"
     }
   }
+
+  cors {
+    origin          = split(",", var.allowed_origins)
+    method          = ["GET", "PUT", "OPTIONS"]
+    response_header = ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"]
+    max_age_seconds = 3600
+  }
 }
 
 # ============================================================================

@@ -7,7 +7,7 @@ It is intentionally implemented with plain TypeScript and clear process boundari
 ## What It Demonstrates
 
 - Electron desktop ingestion client with local DICOM file selection.
-- Local DICOM metadata extraction in the Electron main process and DICOM image rendering with Cornerstone.js in the React renderer.
+- Local DICOM metadata extraction in the Electron main process, lightweight in-app preview, and OHIF launch support for clinical-viewer-style display.
 - De-identification preview for common PHI-bearing tags.
 - Backend upload session API with time-limited Google Cloud Storage signed URLs.
 - Direct-to-storage upload flow so file bytes do not pass through the backend API.
@@ -22,7 +22,7 @@ It is intentionally implemented with plain TypeScript and clear process boundari
 In scope:
 
 - Electron desktop app for selecting local `.dcm` and `.dicom` files.
-- React/MUI renderer for workflow status, DICOM viewer preview, metadata, de-identification findings, upload state, and audit timeline.
+- React/MUI renderer for workflow status, DICOM preview, OHIF launch, metadata, de-identification findings, upload state, and audit timeline.
 - Backend API for upload sessions, audit events, and storage records.
 - Google Cloud Storage-oriented upload flow using signed URLs.
 - Configurable CORS origin allowlist for local development and deployed demos.
@@ -148,6 +148,7 @@ Important behavior:
 
 - `APP_ENV=development` mounts `/dev-storage` for local signed-URL-like development uploads.
 - `APP_ENV=production` disables `/dev-storage` and uses GCS signed URLs.
+- Uploaded objects can be exposed to OHIF through a short-lived signed read URL wrapped in an OHIF-compatible DICOM JSON manifest.
 - `ALLOWED_ORIGINS` is a comma-separated origin allowlist.
 - CORS preflight requests skip rate limiting so browsers receive CORS headers reliably.
 - Per-route rate limits protect audit writes, audit reads, session creation, session reads, and status updates.
@@ -159,6 +160,7 @@ Core API routes:
 - `GET /api/audit-events/:correlationId`
 - `POST /api/upload-sessions`
 - `GET /api/upload-sessions/:uploadSessionId`
+- `GET /api/ohif/upload-sessions/:uploadSessionId.json`
 - `PATCH /api/upload-sessions/:uploadSessionId/status`
 
 ## Desktop App
@@ -172,7 +174,8 @@ Current UI features:
 - Known backend defaults for local development and the deployed Cloud Run demo.
 - Buttons disabled until the backend URL is valid.
 - DICOM file picker restricted to `.dcm` and `.dicom` extensions.
-- DICOM viewer card that uses Cornerstone.js for primary rendering and a lightweight canvas preview as a fallback for supported grayscale images.
+- DICOM viewer card that uses Cornerstone.js for local preview plus a lightweight canvas fallback for supported grayscale images.
+- “Open in OHIF Viewer” action after upload, using the backend-generated DICOM JSON manifest.
 - Workflow log and audit timeline rendered with virtualized lists.
 - Upload session, selected file, DICOM metadata, and de-identification summary cards.
 
@@ -196,6 +199,7 @@ Terraform provisions the demo infrastructure in `infra/terraform`:
 
 - Required GCP APIs: Cloud Run, Artifact Registry, Cloud Storage, IAM.
 - GCS bucket named `${gcp_project_id}-dicom` with uniform bucket-level access.
+- GCS bucket CORS allows configured origins to read signed DICOM objects for OHIF viewing.
 - Artifact Registry Docker repository named `dicom-pipeline-backend`.
 - Cloud Run service named `dicom-pipeline-backend`.
 - Runtime service account named `dicom-pipeline-backend`.
@@ -210,7 +214,25 @@ Terraform variables:
 | `gcp_project_id` | GCP project ID | required |
 | `gcp_region` | GCP region | `us-central1` |
 | `backend_image` | Initial Cloud Run image | Cloud Run hello image |
-| `allowed_origins` | Comma-separated CORS origins | `http://localhost:5173,http://127.0.0.1:5173` |
+| `allowed_origins` | Comma-separated CORS origins | `http://localhost:5173,http://127.0.0.1:5173,https://viewer.ohif.org` |
+
+## OHIF Viewer Integration
+
+The in-app viewer is intentionally lightweight. The more production-aligned viewer path is OHIF, which provides study/series/instance workflows, viewport lifecycle, DICOMWeb-oriented data access, and a mature clinical imaging UI on top of Cornerstone3D.
+
+For this prototype, the backend exposes an OHIF DICOM JSON manifest at:
+
+```text
+GET /api/ohif/upload-sessions/:uploadSessionId.json
+```
+
+That manifest points OHIF at a short-lived signed read URL for the uploaded DICOM object. The desktop enables “Open in OHIF Viewer” once the upload status is `uploaded`.
+
+Production direction:
+
+- Replace the JSON manifest bridge with a real DICOMWeb source such as Google Cloud Healthcare DICOM Store, Orthanc, or dcm4chee.
+- Keep the Electron app focused on hospital-side ingestion, PHI cleanup, upload, retry, and auditability.
+- Use OHIF as the clinical/internal web viewer rather than hand-building full diagnostic viewing features inside the ingestion UI.
 
 ## Continuous Deployment
 
@@ -288,7 +310,7 @@ Backend environment variables:
 | `APP_ENV` | `development` or `production` | `development` |
 | `GCS_BUCKET` | GCS bucket for production signed URLs | unset |
 | `GCS_SIGNED_URL_TTL_SECONDS` | Signed upload URL lifetime | `900` |
-| `ALLOWED_ORIGINS` | Browser CORS allowlist | `http://localhost:5173,http://127.0.0.1:5173` |
+| `ALLOWED_ORIGINS` | Browser CORS allowlist | `http://localhost:5173,http://127.0.0.1:5173,https://viewer.ohif.org` |
 
 Known backend URLs in the desktop autocomplete:
 
@@ -311,7 +333,7 @@ The backend and contracts packages include Vitest coverage for contract factorie
 ## Security Notes
 
 - This is a portfolio/demo prototype, not a production medical device or compliance-certified system.
-- The viewer uses Cornerstone.js for DICOM display, but remains a prototype viewer and is not intended for diagnostic interpretation.
+- The in-app viewer remains a prototype preview and is not intended for diagnostic interpretation; OHIF is the preferred clinical-viewer integration path.
 - File bytes are uploaded directly from Electron to object storage via a time-limited signed URL.
 - The backend stores metadata and audit/session state, not the file payload itself.
 - The current audit and session adapters are suitable for demonstration and tests; production would need durable database-backed adapters.
