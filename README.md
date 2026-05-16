@@ -2,7 +2,7 @@
 
 A focused prototype for DICOM ingestion: local metadata inspection, de-identification preview, signed-URL cloud upload, and append-only auditability — built with plain TypeScript, hexagonal backend architecture, and Effect Schema validation at API boundaries.
 
-**What it demonstrates:** Electron desktop client with local DICOM parsing and preview → backend upload session API with time-limited GCS signed URLs → direct-to-storage upload → append-only audit trail → OHIF viewer integration via DICOM JSON manifest.
+**What it demonstrates:** Electron desktop client with local DICOM parsing and preview → backend upload session API with time-limited GCS signed URLs → direct-to-storage upload → in-app viewer for uploaded files → append-only audit trail.
 
 ## Upload Flow
 
@@ -10,7 +10,7 @@ A focused prototype for DICOM ingestion: local metadata inspection, de-identific
 1. Select      Local DICOM file → SHA-256 hash, metadata extraction, PHI detection
 2. Request     POST /api/upload-sessions → backend returns time-limited signed URL
 3. Upload      PUT file bytes directly to GCS (never through the backend)
-4. View        Open in OHIF viewer via signed-read manifest URL
+4. View        Load uploaded file in in-app DICOM viewer via signed-read URL
 ```
 
 Every step writes an audit event. Signed URLs expire after 900 s by default, limiting replay and stale-upload risk.
@@ -53,7 +53,7 @@ The backend follows hexagonal architecture: workflow logic depends on ports, whi
 - **Local DICOM parsing** — metadata extraction, window/level preview (Cornerstone.js + canvas fallback), de-identification report for PHI-bearing tags
 - **Signed-URL upload** — file bytes stream directly from Electron to GCS; backend never sees the payload
 - **Append-only audit** — every action (select, parse, PHI detect, session create, upload start/success/failure) recorded with correlation IDs
-- **OHIF integration** — `GET /api/ohif/upload-sessions/:id.json` returns a DICOM JSON manifest with signed-read URLs; desktop opens `viewer.ohif.org` directly
+- **In-app DICOM viewer** — Cornerstone.js with canvas fallback for local preview and uploaded-file viewing via signed-read URL
 - **Per-route rate limiting** and Effect Schema request validation
 - **Shared contracts** between desktop and backend at package boundary
 
@@ -65,7 +65,6 @@ The backend follows hexagonal architecture: workflow logic depends on ports, whi
 | GET | `/api/upload-sessions/:id` | Read session/storage record |
 | PATCH | `/api/upload-sessions/:id/status` | Update upload status |
 | GET | `/api/upload-sessions/:id/signed-read` | Get signed read URL for uploaded file |
-| GET | `/api/ohif/upload-sessions/:id.json` | OHIF DICOM JSON manifest |
 | POST | `/api/audit-events` | Write audit event |
 | GET | `/api/audit-events/:correlationId` | Read audit trail |
 
@@ -108,6 +107,6 @@ Backend env vars: `PORT` (8080), `APP_ENV`, `GCS_BUCKET`, `GCS_SIGNED_URL_TTL_SE
 
 ## Scope
 
-**In scope:** local DICOM selection, metadata inspection, de-identification preview, signed-URL upload, audit trail, shared contracts, Cloud Run deployment.
+**In scope:** local DICOM selection, metadata inspection, de-identification preview, signed-URL upload, in-app viewer for uploaded files, audit trail, shared contracts, Cloud Run deployment.
 
 **Not in scope:** clinical-grade de-identification, PACS/VNA/HL7/FHIR integration, HIPAA compliance claims, production database storage.
