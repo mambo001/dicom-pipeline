@@ -7,7 +7,7 @@ It is intentionally implemented with plain TypeScript and clear process boundari
 ## What It Demonstrates
 
 - Electron desktop ingestion client with local DICOM file selection.
-- Local DICOM metadata extraction in the Electron main process.
+- Local DICOM metadata and pixel preview extraction in the Electron main process.
 - De-identification preview for common PHI-bearing tags.
 - Backend upload session API with time-limited Google Cloud Storage signed URLs.
 - Direct-to-storage upload flow so file bytes do not pass through the backend API.
@@ -22,7 +22,7 @@ It is intentionally implemented with plain TypeScript and clear process boundari
 In scope:
 
 - Electron desktop app for selecting local `.dcm` and `.dicom` files.
-- React/MUI renderer for workflow status, metadata, de-identification findings, upload state, and audit timeline.
+- React/MUI renderer for workflow status, DICOM viewer preview, metadata, de-identification findings, upload state, and audit timeline.
 - Backend API for upload sessions, audit events, and storage records.
 - Google Cloud Storage-oriented upload flow using signed URLs.
 - Configurable CORS origin allowlist for local development and deployed demos.
@@ -71,7 +71,7 @@ The ingestion workflow uses three explicit steps so each action is independently
 
 ### Step 1: Select DICOM
 
-The Electron main process reads the file locally, computes a SHA-256 hash, extracts DICOM metadata, and produces a de-identification preview. No file bytes leave the machine during this step.
+The Electron main process reads the file locally, computes a SHA-256 hash, extracts DICOM metadata, produces a de-identification preview, and attempts a local pixel preview for supported grayscale images. No file bytes leave the machine during this step.
 
 Audit events written during selection and inspection include:
 
@@ -172,6 +172,7 @@ Current UI features:
 - Known backend defaults for local development and the deployed Cloud Run demo.
 - Buttons disabled until the backend URL is valid.
 - DICOM file picker restricted to `.dcm` and `.dicom` extensions.
+- DICOM viewer card that renders uncompressed single-frame grayscale pixel data to a React canvas.
 - Workflow log and audit timeline rendered with virtualized lists.
 - Upload session, selected file, DICOM metadata, and de-identification summary cards.
 
@@ -310,6 +311,7 @@ The backend and contracts packages include Vitest coverage for contract factorie
 ## Security Notes
 
 - This is a portfolio/demo prototype, not a production medical device or compliance-certified system.
+- The viewer is a lightweight prototype for uncompressed single-frame grayscale DICOMs, not a diagnostic viewer.
 - File bytes are uploaded directly from Electron to object storage via a time-limited signed URL.
 - The backend stores metadata and audit/session state, not the file payload itself.
 - The current audit and session adapters are suitable for demonstration and tests; production would need durable database-backed adapters.

@@ -42,6 +42,17 @@ type DicomMetadataSummary = {
   readonly columns?: number;
 };
 
+type DicomPixelPreview = {
+  readonly width: number;
+  readonly height: number;
+  readonly sourceWidth: number;
+  readonly sourceHeight: number;
+  readonly photometricInterpretation?: string;
+  readonly bitsAllocated?: number;
+  readonly samplesPerPixel?: number;
+  readonly pixels: readonly number[];
+};
+
 type DeidentificationReport = {
   readonly version: 1;
   readonly kind: "deidentification_report";
@@ -57,6 +68,7 @@ type DicomInspection = {
   readonly isDicom: boolean;
   readonly metadata: DicomMetadataSummary;
   readonly deidentificationReport: DeidentificationReport;
+  readonly pixelPreview?: DicomPixelPreview;
   readonly warnings: readonly string[];
 };
 
@@ -74,6 +86,13 @@ const dicomStringTags = new Map<string, keyof DicomMetadataSummary>([
 const dicomNumericTags = new Map<string, keyof DicomMetadataSummary>([
   ["0028,0010", "rows"],
   ["0028,0011", "columns"]
+]);
+
+const dicomPreviewNumericTags = new Map<string, "samplesPerPixel" | "bitsAllocated" | "bitsStored" | "pixelRepresentation">([
+  ["0028,0002", "samplesPerPixel"],
+  ["0028,0100", "bitsAllocated"],
+  ["0028,0101", "bitsStored"],
+  ["0028,0103", "pixelRepresentation"]
 ]);
 
 const longExplicitVr = new Set(["OB", "OD", "OF", "OL", "OV", "OW", "SQ", "UC", "UR", "UT", "UN"]);
@@ -187,10 +206,12 @@ app.on("activate", () => {
 
 function inspectDicom(contents: Buffer): DicomInspection {
   const metadata: Record<string, string | number> = {};
+  const previewMetadata: Record<string, string | number> = {};
   const warnings: string[] = [];
   const hasPreamble = contents.length > 132 && contents.subarray(128, 132).toString("ascii") === "DICM";
   let offset = hasPreamble ? 132 : 0;
   let explicitVr = true;
+  let pixelData: { readonly offset: number; readonly length: number } | undefined;
 
   while (offset + 8 <= contents.length) {
     const group = contents.readUInt16LE(offset);
@@ -220,8 +241,22 @@ function inspectDicom(contents: Buffer): DicomInspection {
       metadata[numericKey] = contents.readUInt16LE(valueOffset);
     }
 
+    const previewNumericKey = dicomPreviewNumericTags.get(tag);
+    if (previewNumericKey && valueLength >= 2) {
+      previewMetadata[previewNumericKey] = contents.readUInt16LE(valueOffset);
+    }
+
+    if (tag === "0028,0004") {
+      previewMetadata.photometricInterpretation = readDicomString(contents, valueOffset, valueLength);
+    }
+
     if (tag === "0002,0010") {
       explicitVr = readDicomString(contents, valueOffset, valueLength) !== "1.2.840.10008.1.2";
+    }
+
+    if (tag === "7fe0,0010") {
+      pixelData = { offset: valueOffset, length: valueLength };
+      break;
     }
 
     offset = valueOffset + valueLength + (valueLength % 2);
@@ -235,6 +270,7 @@ function inspectDicom(contents: Buffer): DicomInspection {
     isDicom: hasPreamble || Object.keys(metadata).length > 0,
     metadata: metadata as DicomMetadataSummary,
     deidentificationReport: buildDeidentificationReport(metadata as DicomMetadataSummary),
+    pixelPreview: buildPixelPreview(contents, metadata as DicomMetadataSummary, previewMetadata, pixelData, warnings),
     warnings
   };
 }
@@ -255,4 +291,88 @@ function buildDeidentificationReport(metadata: DicomMetadataSummary): Deidentifi
       ...(metadata.studyDate ? [{ tag: "0008,0020", name: "Study Date", action: "retained" as const }] : [])
     ]
   };
+}
+
+function buildPixelPreview(
+  contents: Buffer,
+  metadata: DicomMetadataSummary,
+  previewMetadata: Record<string, string | number>,
+  pixelData: { readonly offset: number; readonly length: number } | undefined,
+  warnings: string[]
+): DicomPixelPreview | undefined {
+  const rows = metadata.rows;
+  const columns = metadata.columns;
+  const samplesPerPixel = numberFromPreview(previewMetadata.samplesPerPixel, 1);
+  const bitsAllocated = numberFromPreview(previewMetadata.bitsAllocated, 8);
+  const pixelRepresentation = numberFromPreview(previewMetadata.pixelRepresentation, 0);
+  const photometricInterpretation = typeof previewMetadata.photometricInterpretation === "string"
+    ? previewMetadata.photometricInterpretation
+    : undefined;
+
+  if (!rows || !columns || !pixelData) {
+    warnings.push("Pixel preview unavailable; required rows, columns, or pixel data were not found.");
+    return undefined;
+  }
+
+  if (samplesPerPixel !== 1) {
+    warnings.push("Pixel preview supports single-sample grayscale DICOM images only in this prototype.");
+    return undefined;
+  }
+
+  if (bitsAllocated !== 8 && bitsAllocated !== 16) {
+    warnings.push(`Pixel preview supports 8-bit and 16-bit grayscale images; this file uses ${bitsAllocated}-bit pixels.`);
+    return undefined;
+  }
+
+  const bytesPerPixel = bitsAllocated / 8;
+  const requiredBytes = rows * columns * samplesPerPixel * bytesPerPixel;
+  if (pixelData.length < requiredBytes || pixelData.offset + requiredBytes > contents.length) {
+    warnings.push("Pixel preview unavailable; pixel data length is shorter than expected for the image dimensions.");
+    return undefined;
+  }
+
+  const maxPreviewDimension = 256;
+  const scale = Math.max(1, Math.ceil(Math.max(columns, rows) / maxPreviewDimension));
+  const width = Math.ceil(columns / scale);
+  const height = Math.ceil(rows / scale);
+  const rawValues: number[] = [];
+
+  for (let y = 0; y < height; y += 1) {
+    const sourceY = Math.min(rows - 1, y * scale);
+    for (let x = 0; x < width; x += 1) {
+      const sourceX = Math.min(columns - 1, x * scale);
+      const pixelOffset = pixelData.offset + (sourceY * columns + sourceX) * bytesPerPixel;
+      rawValues.push(readPixelValue(contents, pixelOffset, bitsAllocated, pixelRepresentation));
+    }
+  }
+
+  const min = Math.min(...rawValues);
+  const max = Math.max(...rawValues);
+  const inverted = photometricInterpretation === "MONOCHROME1";
+  const pixels = rawValues.map((value) => {
+    const normalized = max === min ? 0 : Math.round(((value - min) / (max - min)) * 255);
+    return inverted ? 255 - normalized : normalized;
+  });
+
+  return {
+    width,
+    height,
+    sourceWidth: columns,
+    sourceHeight: rows,
+    photometricInterpretation,
+    bitsAllocated,
+    samplesPerPixel,
+    pixels
+  };
+}
+
+function numberFromPreview(value: string | number | undefined, fallback: number): number {
+  return typeof value === "number" ? value : fallback;
+}
+
+function readPixelValue(contents: Buffer, offset: number, bitsAllocated: number, pixelRepresentation: number): number {
+  if (bitsAllocated === 8) {
+    return pixelRepresentation === 1 ? contents.readInt8(offset) : contents.readUInt8(offset);
+  }
+  return pixelRepresentation === 1 ? contents.readInt16LE(offset) : contents.readUInt16LE(offset);
 }

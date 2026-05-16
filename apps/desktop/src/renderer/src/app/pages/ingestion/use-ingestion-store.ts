@@ -19,6 +19,16 @@ type DicomInspection = {
   readonly isDicom: boolean;
   readonly metadata: import("@dicom-pipeline/contracts").DicomMetadataSummary;
   readonly deidentificationReport: import("@dicom-pipeline/contracts").DeidentificationReport;
+  readonly pixelPreview?: {
+    readonly width: number;
+    readonly height: number;
+    readonly sourceWidth: number;
+    readonly sourceHeight: number;
+    readonly photometricInterpretation?: string;
+    readonly bitsAllocated?: number;
+    readonly samplesPerPixel?: number;
+    readonly pixels: readonly number[];
+  };
   readonly warnings: readonly string[];
 };
 
@@ -399,6 +409,7 @@ async function inspectSelectedFile(
     await appendAuditEvent(set, get, nextCorrelationId, "dicom.metadata.parsed", "local_file", file.sha256, {
       modality: inspection.metadata.modality ?? null,
       studyInstanceUid: inspection.metadata.studyInstanceUid ?? null,
+      pixelPreviewAvailable: Boolean(inspection.pixelPreview),
       phiFindingCount: inspection.deidentificationReport.findings.length
     });
 

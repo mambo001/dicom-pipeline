@@ -6,6 +6,7 @@ import { InstructionsCard } from "./instructions-card";
 import { ActionCard } from "./action-card";
 import { SelectedFileCard, UploadSessionCard } from "./upload-session-card";
 import { DicomMetadataCard, DeidentificationCard } from "./dicom-panels";
+import { DicomViewerCard } from "./dicom-viewer-card";
 import { WorkflowLogCard } from "./workflow-log-card";
 import { AuditTimelineCard } from "./audit-timeline-card";
 
@@ -33,6 +34,7 @@ export function IngestionWorkspace() {
           <DeidentificationCard />
         </Grid>
       </Grid>
+      <DicomViewerCard />
       <WorkflowLogCard />
       <AuditTimelineCard />
     </Stack>

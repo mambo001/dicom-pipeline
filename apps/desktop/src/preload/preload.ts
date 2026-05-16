@@ -49,10 +49,22 @@ type DeidentificationReport = {
   }[];
 };
 
+type DicomPixelPreview = {
+  readonly width: number;
+  readonly height: number;
+  readonly sourceWidth: number;
+  readonly sourceHeight: number;
+  readonly photometricInterpretation?: string;
+  readonly bitsAllocated?: number;
+  readonly samplesPerPixel?: number;
+  readonly pixels: readonly number[];
+};
+
 type DicomInspection = {
   readonly isDicom: boolean;
   readonly metadata: DicomMetadataSummary;
   readonly deidentificationReport: DeidentificationReport;
+  readonly pixelPreview?: DicomPixelPreview;
   readonly warnings: readonly string[];
 };
 
