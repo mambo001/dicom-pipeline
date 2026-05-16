@@ -43,11 +43,16 @@ export const UploadStatusUpdateSchema = Schema.Struct({
   status: UploadSessionStatusSchema
 });
 
+export const SignedReadUrlResponseSchema = Schema.Struct({
+  signedReadUrl: Schema.String
+});
+
 export type UploadSessionStatus = Schema.Schema.Type<typeof UploadSessionStatusSchema>;
 export type CreateUploadSessionRequest = Schema.Schema.Type<typeof CreateUploadSessionRequestSchema>;
 export type CreateUploadSessionResponse = Schema.Schema.Type<typeof CreateUploadSessionResponseSchema>;
 export type StorageObjectRecord = Schema.Schema.Type<typeof StorageObjectRecordSchema>;
 export type UploadStatusUpdate = Schema.Schema.Type<typeof UploadStatusUpdateSchema>;
+export type SignedReadUrlResponse = Schema.Schema.Type<typeof SignedReadUrlResponseSchema>;
 
 export function createUploadSessionRequest(
   input: Omit<CreateUploadSessionRequest, "version" | "kind" | "contentType"> & {
