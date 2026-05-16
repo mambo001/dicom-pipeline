@@ -44,7 +44,7 @@
           "arch": ["arm64"]
         }
 ]
-  },
+    }
   },
   "dependencies": {
     "@dicom-pipeline/contracts": "0.1.0"
