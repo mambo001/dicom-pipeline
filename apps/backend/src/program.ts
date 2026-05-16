@@ -1,6 +1,13 @@
 import express from "express";
 import cors from "cors";
-import type { AuditEvent, CreateUploadSessionRequest } from "@dicom-pipeline/contracts";
+import {
+  AuditEventSchema,
+  CreateUploadSessionRequestSchema,
+  StorageObjectRecordSchema,
+  UploadStatusUpdateSchema,
+  validateUnknown
+} from "@dicom-pipeline/contracts";
+import type { AuditEvent, CreateUploadSessionRequest, StorageObjectRecord, UploadStatusUpdate } from "@dicom-pipeline/contracts";
 import { apiError } from "./data/http";
 import { createUploadSession } from "./integration/uploadSessions";
 import type { AuditLog } from "./ports/AuditLog";
@@ -45,14 +52,14 @@ export function createApp(dependencies: AppDependencies): express.Express {
   });
 
   app.post("/api/audit-events", async (request, response) => {
-    const event = request.body as AuditEvent;
+    const validated = validateUnknown(AuditEventSchema, request.body);
 
-    if (event.kind !== "audit_event" || !event.eventId || !event.correlationId) {
-      response.status(400).json(apiError("invalid_audit_event", "Audit event is missing required fields"));
+    if (!validated.ok) {
+      response.status(400).json(apiError("invalid_audit_event", validated.errors));
       return;
     }
 
-    const appended = await dependencies.auditLog.append(event);
+    const appended = await dependencies.auditLog.append(validated.value as AuditEvent);
     response.status(201).json(appended);
   });
 
@@ -62,14 +69,14 @@ export function createApp(dependencies: AppDependencies): express.Express {
   });
 
   app.post("/api/upload-sessions", async (request, response) => {
-    const input = request.body as CreateUploadSessionRequest;
+    const validated = validateUnknown(CreateUploadSessionRequestSchema, request.body);
 
-    if (input.kind !== "create_upload_session_request" || input.contentType !== "application/dicom") {
-      response.status(400).json(apiError("invalid_upload_session_request", "Expected a DICOM upload session request"));
+    if (!validated.ok) {
+      response.status(400).json(apiError("invalid_upload_session_request", validated.errors));
       return;
     }
 
-    const uploadSession = await createUploadSession(input, dependencies);
+    const uploadSession = await createUploadSession(validated.value as CreateUploadSessionRequest, dependencies);
     response.status(201).json(uploadSession);
   });
 
@@ -85,13 +92,14 @@ export function createApp(dependencies: AppDependencies): express.Express {
   });
 
   app.post("/api/upload-sessions/:uploadSessionId/status", async (request, response) => {
-    const status = request.body?.status as unknown;
+    const validated = validateUnknown(UploadStatusUpdateSchema, request.body);
 
-    if (status !== "uploading" && status !== "uploaded" && status !== "failed") {
-      response.status(400).json(apiError("invalid_upload_status", "Upload status is not supported"));
+    if (!validated.ok) {
+      response.status(400).json(apiError("invalid_upload_status", validated.errors));
       return;
     }
 
+    const { status } = validated.value as UploadStatusUpdate;
     const record = await dependencies.storageRecords.updateStatus(request.params.uploadSessionId, status);
 
     if (!record) {

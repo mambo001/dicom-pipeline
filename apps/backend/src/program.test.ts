@@ -119,11 +119,8 @@ describe("createApp", () => {
     });
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: {
-        code: "invalid_upload_session_request",
-        message: "Expected a DICOM upload session request"
-      }
-    });
+    const body = (await response.json()) as { readonly error: { readonly code: string; readonly message: string } };
+    expect(body.error.code).toBe("invalid_upload_session_request");
+    expect(body.error.message).toContain("is missing");
   });
 });
