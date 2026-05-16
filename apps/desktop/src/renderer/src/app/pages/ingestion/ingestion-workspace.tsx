@@ -1,5 +1,5 @@
-import { useState } from "react";
 import type { ReactNode } from "react";
+import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -16,314 +16,29 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { alpha } from "@mui/material/styles";
 import { format, isValid, parse } from "date-fns";
-import {
-  type AuditEvent,
-  type CreateUploadSessionResponse,
-  type DeidentificationReport,
-  type DicomMetadataSummary,
-  type StorageObjectRecord
-} from "@dicom-pipeline/contracts";
-
-type SelectedDicomFile = {
-  readonly path: string;
-  readonly name: string;
-  readonly sizeBytes: number;
-  readonly sha256: string;
-};
-
-type DicomDesktopApi = {
-  readonly selectDicomFile: () => Promise<SelectedDicomFile | undefined>;
-  readonly inspectDicomFile: (filePath: string) => Promise<DicomInspection>;
-  readonly uploadDicomFile: (
-    input: {
-      readonly uploadId: string;
-      readonly filePath: string;
-      readonly signedUploadUrl: string;
-      readonly sizeBytes: number;
-    },
-    onProgress: (progress: { readonly uploadedBytes: number; readonly totalBytes: number }) => void
-  ) => Promise<{ readonly ok: boolean; readonly statusCode: number; readonly responseBody: string }>;
-};
-
-type DicomInspection = {
-  readonly isDicom: boolean;
-  readonly metadata: DicomMetadataSummary;
-  readonly deidentificationReport: DeidentificationReport;
-  readonly warnings: readonly string[];
-};
-
-function getDesktopApi(): DicomDesktopApi {
-  return (window as Window & { readonly dicomDesktop: DicomDesktopApi }).dicomDesktop;
-}
-
-type WorkflowMessage = {
-  readonly level: "info" | "success" | "error";
-  readonly text: string;
-};
-
-type UploadStatus = "idle" | "uploading" | "uploaded" | "failed";
+import type { DicomMetadataSummary } from "@dicom-pipeline/contracts";
+import { useIngestionStore } from "./use-ingestion-store";
 
 export function IngestionWorkspace() {
-  const [backendUrl, setBackendUrl] = useState("http://localhost:8080");
-  const [correlationId, setCorrelationId] = useState(() => crypto.randomUUID());
-  const [selectedFile, setSelectedFile] = useState<SelectedDicomFile>();
-  const [dicomInspection, setDicomInspection] = useState<DicomInspection>();
-  const [uploadSession, setUploadSession] = useState<CreateUploadSessionResponse>();
-  const [storageRecord, setStorageRecord] = useState<StorageObjectRecord>();
-  const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [auditEvents, setAuditEvents] = useState<readonly AuditEvent[]>([]);
-  const [messages, setMessages] = useState<readonly WorkflowMessage[]>([]);
-
-  async function selectFile() {
-    const file = await getDesktopApi().selectDicomFile();
-
-    if (!file) {
-      return;
-    }
-
-    const nextCorrelationId = crypto.randomUUID();
-    setCorrelationId(nextCorrelationId);
-    setSelectedFile(file);
-    setDicomInspection(undefined);
-    setUploadSession(undefined);
-    setStorageRecord(undefined);
-    setUploadStatus("idle");
-    setUploadProgress(0);
-    setAuditEvents([]);
-    addMessage("success", `Selected ${file.name}`);
-
-    await appendAuditEvent(nextCorrelationId, "dicom.file.selected", "local_file", file.sha256, {
-      fileName: file.name,
-      sizeBytes: file.sizeBytes
-    });
-
-    await inspectSelectedFile(file, nextCorrelationId);
-  }
-
-  async function inspectSelectedFile(file: SelectedDicomFile, nextCorrelationId: string) {
-    try {
-      const inspection = await getDesktopApi().inspectDicomFile(file.path);
-      setDicomInspection(inspection);
-
-      if (!inspection.isDicom) {
-        addMessage("error", "File does not look like a parseable DICOM dataset.");
-        return;
-      }
-
-      await appendAuditEvent(nextCorrelationId, "dicom.metadata.parsed", "local_file", file.sha256, {
-        modality: inspection.metadata.modality ?? null,
-        studyInstanceUid: inspection.metadata.studyInstanceUid ?? null,
-        phiFindingCount: inspection.deidentificationReport.findings.length
-      });
-
-      if (inspection.deidentificationReport.findings.length > 0) {
-        await appendAuditEvent(nextCorrelationId, "dicom.phi.detected", "local_file", file.sha256, {
-          findingCount: inspection.deidentificationReport.findings.length,
-          rulesetId: inspection.deidentificationReport.rulesetId
-        });
-      }
-
-      await appendAuditEvent(nextCorrelationId, "dicom.deidentified", "local_file", file.sha256, {
-        mode: "preview_only",
-        rulesetId: inspection.deidentificationReport.rulesetId
-      });
-      addMessage("success", "DICOM metadata inspected and de-identification preview generated.");
-    } catch (error) {
-      addMessage("error", error instanceof Error ? error.message : "DICOM inspection failed.");
-    }
-  }
-
-  async function requestUploadSession() {
-    if (!selectedFile) {
-      addMessage("error", "Select a DICOM file before requesting an upload session.");
-      return;
-    }
-
-    await appendAuditEvent(correlationId, "upload.session.requested", "local_file", selectedFile.sha256, {
-      fileName: selectedFile.name
-    });
-
-    const response = await fetch(`${backendUrl}/api/upload-sessions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        {
-          version: 1,
-          kind: "create_upload_session_request",
-          correlationId,
-          fileName: selectedFile.name,
-          contentType: "application/dicom",
-          fileSha256: selectedFile.sha256,
-          sizeBytes: selectedFile.sizeBytes
-        }
-      )
-    });
-
-    if (!response.ok) {
-      addMessage("error", "Backend rejected upload session request.");
-      return;
-    }
-
-    const session = (await response.json()) as CreateUploadSessionResponse;
-    setUploadSession(session);
-    await loadStorageRecord(session.uploadSessionId);
-    setUploadStatus("idle");
-    setUploadProgress(0);
-    addMessage("success", "Upload session created with signed storage URL.");
-  }
-
-  async function uploadFile() {
-    if (!selectedFile || !uploadSession) {
-      addMessage("error", "Create an upload session before uploading the file.");
-      return;
-    }
-
-    const uploadId = crypto.randomUUID();
-
-    setUploadStatus("uploading");
-    setUploadProgress(0);
-    await updateUploadStatus(uploadSession.uploadSessionId, "uploading");
-    await appendAuditEvent(correlationId, "upload.started", "upload_session", uploadSession.uploadSessionId, {
-      objectName: uploadSession.objectName
-    });
-
-    try {
-      const result = await getDesktopApi().uploadDicomFile(
-        {
-          uploadId,
-          filePath: selectedFile.path,
-          signedUploadUrl: uploadSession.signedUploadUrl,
-          sizeBytes: selectedFile.sizeBytes
-        },
-        (progress) => {
-          if (progress.totalBytes > 0) {
-            setUploadProgress(Math.round((progress.uploadedBytes / progress.totalBytes) * 100));
-          }
-        }
-      );
-
-      if (!result.ok) {
-        throw new Error(`Upload failed with HTTP ${result.statusCode}`);
-      }
-
-      setUploadStatus("uploaded");
-      setUploadProgress(100);
-      await updateUploadStatus(uploadSession.uploadSessionId, "uploaded");
-      await appendAuditEvent(correlationId, "upload.succeeded", "storage_object", uploadSession.objectName, {
-        uploadSessionId: uploadSession.uploadSessionId,
-        sizeBytes: selectedFile.sizeBytes
-      });
-      addMessage("success", "File uploaded to signed storage URL.");
-    } catch (error) {
-      setUploadStatus("failed");
-      await updateUploadStatus(uploadSession.uploadSessionId, "failed");
-      await appendAuditEvent(
-        correlationId,
-        "upload.failed",
-        "upload_session",
-        uploadSession.uploadSessionId,
-        { message: error instanceof Error ? error.message : "Unknown upload error" },
-        "failure",
-        "upload_failed"
-      );
-      addMessage("error", error instanceof Error ? error.message : "Upload failed.");
-    }
-  }
-
-  async function updateUploadStatus(uploadSessionId: string, status: "uploading" | "uploaded" | "failed") {
-    const response = await fetch(`${backendUrl}/api/upload-sessions/${uploadSessionId}/status`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status })
-    });
-
-    if (!response.ok) {
-      addMessage("error", `Failed to update upload status: ${status}`);
-      return;
-    }
-
-    const record = (await response.json()) as StorageObjectRecord;
-    setStorageRecord(record);
-  }
-
-  async function loadStorageRecord(uploadSessionId: string) {
-    const response = await fetch(`${backendUrl}/api/upload-sessions/${uploadSessionId}`);
-
-    if (!response.ok) {
-      addMessage("error", "Failed to load upload session status.");
-      return;
-    }
-
-    const record = (await response.json()) as StorageObjectRecord;
-    setStorageRecord(record);
-    setUploadStatus(record.status === "created" ? "idle" : record.status);
-  }
-
-  async function loadAuditEvents() {
-    const response = await fetch(`${backendUrl}/api/audit-events/${correlationId}`);
-
-    if (!response.ok) {
-      addMessage("error", "Failed to load audit timeline.");
-      return;
-    }
-
-    const body = (await response.json()) as { readonly events: readonly AuditEvent[] };
-    setAuditEvents(body.events);
-  }
-
-  async function refreshTraceability() {
-    await loadAuditEvents();
-
-    if (uploadSession) {
-      await loadStorageRecord(uploadSession.uploadSessionId);
-    }
-  }
-
-  async function appendAuditEvent(
-    eventCorrelationId: string,
-    action: AuditEvent["action"],
-    targetKind: AuditEvent["target"]["kind"],
-    targetId: string,
-    details?: Record<string, string | number | boolean | null>,
-    result: AuditEvent["result"] = "success",
-    errorCode?: string
-  ) {
-    const event: AuditEvent = {
-      version: 1,
-      kind: "audit_event",
-      eventId: crypto.randomUUID(),
-      occurredAt: new Date().toISOString(),
-      correlationId: eventCorrelationId,
-      actor: { kind: "desktop", id: "local-prototype-client" },
-      action,
-      target: { kind: targetKind, id: targetId },
-      result,
-      details,
-      errorCode
-    };
-
-    const response = await fetch(`${backendUrl}/api/audit-events`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(event)
-    });
-
-    if (!response.ok) {
-      addMessage("error", `Failed to write audit event: ${action}`);
-      return;
-    }
-
-    const appended = (await response.json()) as AuditEvent;
-
-    if (appended.correlationId === correlationId || appended.correlationId === eventCorrelationId) {
-      setAuditEvents((current) => [...current, appended]);
-    }
-  }
-
-  function addMessage(level: WorkflowMessage["level"], text: string) {
-    setMessages((current) => [{ level, text }, ...current].slice(0, 8));
-  }
+  const backendUrl = useIngestionStore((s) => s.backendUrl);
+  const backendUrlReady = useIngestionStore((s) => s.backendUrlReady);
+  const backendUrlError = useIngestionStore((s) => s.backendUrlError);
+  const knownUrls = useIngestionStore((s) => s.knownUrls);
+  const correlationId = useIngestionStore((s) => s.correlationId);
+  const selectedFile = useIngestionStore((s) => s.selectedFile);
+  const dicomInspection = useIngestionStore((s) => s.dicomInspection);
+  const uploadSession = useIngestionStore((s) => s.uploadSession);
+  const storageRecord = useIngestionStore((s) => s.storageRecord);
+  const uploadStatus = useIngestionStore((s) => s.uploadStatus);
+  const uploadProgress = useIngestionStore((s) => s.uploadProgress);
+  const auditEvents = useIngestionStore((s) => s.auditEvents);
+  const messages = useIngestionStore((s) => s.messages);
+  const setBackendUrl = useIngestionStore((s) => s.setBackendUrl);
+  const persistBackendUrl = useIngestionStore((s) => s.persistBackendUrl);
+  const selectFile = useIngestionStore((s) => s.selectFile);
+  const requestUploadSession = useIngestionStore((s) => s.requestUploadSession);
+  const uploadFile = useIngestionStore((s) => s.uploadFile);
+  const refreshTraceability = useIngestionStore((s) => s.refreshTraceability);
 
   return (
     <Stack spacing={3}>
@@ -350,39 +65,49 @@ export function IngestionWorkspace() {
 
       <Card>
         <CardContent>
-          <Grid container spacing={2} sx={{ alignItems: "end" }}>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <TextField
-                fullWidth
-                label="Backend URL"
+          <Grid container spacing={2}>
+            <Grid size={12}>
+              <Autocomplete
+                freeSolo
+                disableClearable
+                options={knownUrls}
                 value={backendUrl}
-                onChange={(event) => setBackendUrl(event.target.value)}
+                onInputChange={(_, value) => setBackendUrl(value)}
+                onBlur={persistBackendUrl}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Backend URL"
+                    error={!backendUrlReady}
+                    helperText={backendUrlError}
+                  />
+                )}
               />
             </Grid>
-            <Grid size={{ xs: 12, md: 2 }}>
-              <Button fullWidth variant="contained" size="large" onClick={selectFile}>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <Button fullWidth variant="contained" size="large" onClick={selectFile} disabled={!backendUrlReady}>
                 Select DICOM
               </Button>
             </Grid>
-            <Grid size={{ xs: 12, md: 2 }}>
+            <Grid size={{ xs: 12, md: 4 }}>
               <Button
                 fullWidth
                 variant="outlined"
                 size="large"
                 onClick={requestUploadSession}
-                disabled={!selectedFile}
+                disabled={!backendUrlReady || !selectedFile}
               >
                 Create session
               </Button>
             </Grid>
-            <Grid size={{ xs: 12, md: 2 }}>
+            <Grid size={{ xs: 12, md: 4 }}>
               <Button
                 fullWidth
                 variant="contained"
                 color={uploadStatus === "failed" ? "warning" : "secondary"}
                 size="large"
                 onClick={uploadFile}
-                disabled={!selectedFile || !uploadSession || uploadStatus === "uploading" || uploadStatus === "uploaded"}
+                disabled={!backendUrlReady || !selectedFile || !uploadSession || uploadStatus === "uploading" || uploadStatus === "uploaded"}
               >
                 {uploadStatus === "failed" ? "Retry upload" : "Upload file"}
               </Button>
