@@ -19,6 +19,9 @@ export function InstructionsCard() {
             <strong>3. Upload</strong> — Stream the file to the signed URL. Every step is recorded in an append-only audit timeline for regulatory traceability.
           </Typography>
         </Stack>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+          Use <strong>http://localhost:8080</strong> for local development or <strong>https://dicom-pipeline-backend-32692867045.us-central1.run.app</strong> for the deployed demo backend.
+        </Typography>
       </CardContent>
     </Card>
   );
