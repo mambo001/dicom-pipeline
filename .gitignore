@@ -6,6 +6,7 @@ coverage/
 .env.*
 !.env.example
 *.log
+*.tsbuildinfo
 gcp-sa-key.json
 service-account.json
 storage/

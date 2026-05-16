@@ -20,7 +20,20 @@ import {
   type CreateUploadSessionResponse
 } from "@dicom-pipeline/contracts";
 
-type SelectedDicomFile = Awaited<ReturnType<typeof window.dicomDesktop.selectDicomFile>>;
+type SelectedDicomFile = {
+  readonly path: string;
+  readonly name: string;
+  readonly sizeBytes: number;
+  readonly sha256: string;
+};
+
+type DicomDesktopApi = {
+  readonly selectDicomFile: () => Promise<SelectedDicomFile | undefined>;
+};
+
+function getDesktopApi(): DicomDesktopApi {
+  return (window as Window & { readonly dicomDesktop: DicomDesktopApi }).dicomDesktop;
+}
 
 type WorkflowMessage = {
   readonly level: "info" | "success" | "error";
@@ -35,7 +48,7 @@ export function IngestionWorkspace() {
   const [messages, setMessages] = useState<readonly WorkflowMessage[]>([]);
 
   async function selectFile() {
-    const file = await window.dicomDesktop.selectDicomFile();
+    const file = await getDesktopApi().selectDicomFile();
 
     if (!file) {
       return;
