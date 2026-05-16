@@ -10,6 +10,8 @@
     "dev": "npm run build --workspace @dicom-pipeline/contracts && concurrently -k -n backend,renderer,main,preload,electron -c blue,green,magenta,cyan,yellow \"npm run dev --workspace @dicom-pipeline/backend\" \"npm run dev:renderer --workspace @dicom-pipeline/desktop\" \"npm run dev:main --workspace @dicom-pipeline/desktop\" \"npm run dev:preload --workspace @dicom-pipeline/desktop\" \"npm run dev:electron --workspace @dicom-pipeline/desktop\"",
     "dev:backend": "npm run dev --workspace @dicom-pipeline/backend",
     "dev:desktop": "npm run dev --workspace @dicom-pipeline/desktop",
+    "fixtures:dicom": "node scripts/generate-test-dicom.mjs",
+    "fixtures:dicom:download": "node scripts/fetch-test-dicom.mjs",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",

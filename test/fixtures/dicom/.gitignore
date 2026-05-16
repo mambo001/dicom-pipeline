@@ -1,0 +1,3 @@
+*.dcm
+!.gitignore
+!README.md
