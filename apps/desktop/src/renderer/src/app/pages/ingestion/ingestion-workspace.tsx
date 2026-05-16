@@ -15,6 +15,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { alpha } from "@mui/material/styles";
+import { format, isValid, parse } from "date-fns";
 import {
   type AuditEvent,
   type CreateUploadSessionResponse,
@@ -413,7 +414,7 @@ export function IngestionWorkspace() {
                 rows={[
                   ["Session ID", uploadSession.uploadSessionId],
                   ["Object", uploadSession.objectName],
-                  ["Expires", uploadSession.expiresAt],
+                  ["Expires", formatTimestamp(uploadSession.expiresAt, "yyyy-MM-dd HH:mm:ss zzz")],
                   ["UI Status", uploadStatus],
                   ["Stored Status", storageRecord?.status ?? "not loaded"]
                 ]}
@@ -535,7 +536,7 @@ export function IngestionWorkspace() {
                   />
                   <ListItemText
                     primary={event.action}
-                    secondary={`${event.occurredAt} | ${event.target.kind}: ${event.target.id}`}
+                    secondary={`${formatTimestamp(event.occurredAt)} | ${event.target.kind}: ${event.target.id}`}
                   />
                 </ListItem>
               ))
@@ -551,14 +552,28 @@ function metadataRows(metadata: DicomMetadataSummary): readonly (readonly [strin
   return [
     ["Patient", metadata.patientName ?? "not present"],
     ["Patient ID", metadata.patientId ?? "not present"],
-    ["Birth Date", metadata.patientBirthDate ?? "not present"],
+    ["Birth Date", formatDicomDate(metadata.patientBirthDate)],
     ["Modality", metadata.modality ?? "not present"],
-    ["Study Date", metadata.studyDate ?? "not present"],
+    ["Study Date", formatDicomDate(metadata.studyDate)],
     ["Study UID", metadata.studyInstanceUid ?? "not present"],
     ["Series UID", metadata.seriesInstanceUid ?? "not present"],
     ["SOP UID", metadata.sopInstanceUid ?? "not present"],
     ["Image Size", metadata.rows && metadata.columns ? `${metadata.columns} x ${metadata.rows}` : "not present"]
   ];
+}
+
+function formatDicomDate(value?: string): string {
+  if (!value) {
+    return "not present";
+  }
+
+  const parsed = parse(value, "yyyyMMdd", new Date());
+  return isValid(parsed) ? format(parsed, "yyyy-MM-dd") : value;
+}
+
+function formatTimestamp(value: string, pattern = "yyyy-MM-dd HH:mm:ss"): string {
+  const parsed = new Date(value);
+  return isValid(parsed) ? format(parsed, pattern) : value;
 }
 
 function InfoCard(props: {

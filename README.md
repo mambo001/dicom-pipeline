@@ -37,6 +37,72 @@ Backend API
      Google Cloud Storage
 ```
 
+## Upload Flow
+
+The ingestion flow uses three explicit steps so each action is independently auditable — a common requirement in regulated medical-imaging pipelines.
+
+### Step 1: Select DICOM — "Inspect what you have"
+
+The Electron main process reads the file locally, extracts DICOM metadata, and produces a de-identification preview. No bytes leave the machine. Audit events (`dicom.file.selected`, `dicom.metadata.parsed`, `dicom.phi.detected`, `dicom.deidentified`) are written.
+
+### Step 2: Create session — "Reserve the upload slot"
+
+The desktop requests a time-limited signed URL from the backend (`POST /api/upload-sessions`). The backend creates a storage record and returns a signed URL that expires after a configurable window (default 15 minutes). No bytes are transferred yet. A `upload.session.requested` audit event is written.
+
+Why a time-limited signed URL?
+
+| Concern | How a signed URL helps |
+|---|---|
+| Stolen URL | Damage window is limited to the TTL, not permanent |
+| Regulatory (HIPAA/HITECH) | Time-bounded access grants preferred over perpetual credentials |
+| Replay attacks | A saved URL cannot upload months later |
+| Object collision | Stale URLs from old sessions cannot overwrite newer uploads |
+| Audit alignment | The `expiresAt` is recorded so auditors can trace the upload window |
+
+### Step 3: Upload file — "Move the bytes"
+
+The Electron main process streams the file from disk directly to the signed URL (`PUT`), with progress relayed to the renderer. This is the only transfer of file bytes. On completion the backend storage record is updated (`uploading` → `uploaded` or `failed`). Audit events (`upload.started`, `upload.succeeded` or `upload.failed`) are written. A failed upload can be retried against the same session.
+
+### Component Interaction
+
+```
+┌─────────────────────────────────────────────────┐
+│ Electron Desktop App                            │
+│                                                 │
+│  ┌──────────┐    IPC     ┌───────────┐         │
+│  │  Renderer │◄─────────►│  Preload   │         │
+│  │ (React)   │           │ (bridge)   │         │
+│  └────┬──────┘           └─────┬──────┘         │
+│       │                        │                │
+│       │ fetch()         invoke │   invoke       │
+│       │                 handle │   handle       │
+│       │                        │                │
+│  ┌────▼──────┐           ┌─────▼──────┐        │
+│  │ Backend   │           │   Main     │        │
+│  │  API      │           │  Process   │        │
+│  └─────┬─────┘           └─────┬──────┘        │
+└────────┼───────────────────────┼────────────────┘
+         │                       │
+         │ POST /api/            │ PUT signed URL
+         │   audit-events        │   (stream)
+         │   upload-sessions     │
+         │   .../status          │
+         │                       │
+    ┌────▼────┐             ┌────▼────┐
+    │ Backend │             │ Storage │
+    │ Express │             │ (GCS /  │
+    │         │             │  dev-   │
+    │ audit ◄─┼── signed ──► storage │
+    │  log   │ │  URL gen   │  mock)  │
+    │ session│ │            │         │
+    │ records│ │            │         │
+    └─────────┘             └─────────┘
+
+Step 1 ──► renderer ◄──IPC──► main (local file read + inspect)
+Step 2 ──► renderer ──fetch──► backend (session & signed URL)
+Step 3 ──► renderer ◄──IPC──► main ──stream──► storage
+```
+
 ## Repository Layout
 
 - `apps/backend`: plain TypeScript API with ports, adapters, and environment wiring
