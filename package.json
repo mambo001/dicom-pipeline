@@ -15,7 +15,7 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run build --workspace @dicom-pipeline/contracts && npm run test --workspaces --if-present"
   },
   "devDependencies": {
     "@types/node": "^22.15.17",

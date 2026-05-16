@@ -4,6 +4,12 @@ export type SignedUpload = {
   readonly expiresAt: string;
 };
 
+export type SignedRead = {
+  readonly objectName: string;
+  readonly signedReadUrl: string;
+  readonly expiresAt: string;
+};
+
 export type CreateSignedUploadInput = {
   readonly uploadSessionId: string;
   readonly correlationId: string;
@@ -14,4 +20,5 @@ export type CreateSignedUploadInput = {
 export type ObjectStorage = {
   readonly bucket: string;
   readonly createSignedUpload: (input: CreateSignedUploadInput) => Promise<SignedUpload>;
+  readonly createSignedRead: (objectName: string) => Promise<SignedRead>;
 };

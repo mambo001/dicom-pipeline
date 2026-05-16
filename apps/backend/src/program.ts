@@ -10,6 +10,7 @@ import {
 } from "@dicom-pipeline/contracts";
 import type { AuditEvent, CreateUploadSessionRequest, StorageObjectRecord, UploadStatusUpdate } from "@dicom-pipeline/contracts";
 import { apiError } from "./data/http";
+import { createOhifDicomJsonManifest } from "./integration/ohifManifest";
 import { createUploadSession } from "./integration/uploadSessions";
 import type { AuditLog } from "./ports/AuditLog";
 import type { ObjectStorage } from "./ports/ObjectStorage";
@@ -34,11 +35,29 @@ const defaultLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 100
 
 export function createApp(dependencies: AppDependencies, appEnv: "development" | "production", allowedOrigins: string): express.Express {
   const app = express();
+  const devStorageObjects = new Map<string, Buffer>();
 
   app.use(cors({ origin: allowedOrigins.split(",").map((o) => o.trim()), maxAge: 86400 }));
   app.use(defaultLimiter);
 
   if (appEnv === "development") {
+    app.get("/dev-storage", async (request, response) => {
+      const objectName = String(request.query.objectName ?? "");
+
+      if (!objectName) {
+        response.status(400).json(apiError("invalid_dev_storage_request", "Object name is required"));
+        return;
+      }
+
+      const body = devStorageObjects.get(objectName);
+      if (!body) {
+        response.status(404).json(apiError("dev_storage_object_not_found", "Stored object was not found"));
+        return;
+      }
+
+      response.contentType("application/dicom").send(body);
+    });
+
     app.put("/dev-storage", express.raw({ limit: "2gb", type: "application/dicom" }), async (request, response) => {
       const uploadSessionId = String(request.query.uploadSessionId ?? "");
       const objectName = String(request.query.objectName ?? "");
@@ -55,6 +74,7 @@ export function createApp(dependencies: AppDependencies, appEnv: "development" |
         return;
       }
 
+      devStorageObjects.set(objectName, Buffer.from(request.body));
       await dependencies.storageRecords.updateStatus(uploadSessionId, "uploaded");
       response.status(200).json({ ok: true, bytesReceived: request.body.length });
     });
@@ -106,6 +126,24 @@ export function createApp(dependencies: AppDependencies, appEnv: "development" |
     }
 
     response.json(record);
+  });
+
+  app.get("/api/ohif/upload-sessions/:uploadSessionId.json", sessionReadLimiter, async (request, response) => {
+    const { uploadSessionId } = request.params as { readonly uploadSessionId: string };
+    const record = await dependencies.storageRecords.get(uploadSessionId);
+
+    if (!record) {
+      response.status(404).json(apiError("upload_session_not_found", "Upload session was not found"));
+      return;
+    }
+
+    if (record.status !== "uploaded") {
+      response.status(409).json(apiError("upload_not_available", "Upload must complete before opening the OHIF viewer"));
+      return;
+    }
+
+    const signedRead = await dependencies.objectStorage.createSignedRead(record.objectName);
+    response.json(createOhifDicomJsonManifest(record, signedRead.signedReadUrl));
   });
 
   app.post("/api/upload-sessions/:uploadSessionId/status", statusUpdateLimiter, async (request, response) => {

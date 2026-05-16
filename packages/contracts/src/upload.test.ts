@@ -7,6 +7,7 @@ describe("createUploadSessionRequest", () => {
       createUploadSessionRequest({
         correlationId: "correlation-1",
         fileName: "study.dcm",
+        dicomMetadata: { modality: "CT", rows: 512, columns: 512 },
         fileSha256: "sha-256",
         sizeBytes: 123
       })
@@ -16,6 +17,7 @@ describe("createUploadSessionRequest", () => {
       correlationId: "correlation-1",
       fileName: "study.dcm",
       contentType: "application/dicom",
+      dicomMetadata: { modality: "CT", rows: 512, columns: 512 },
       fileSha256: "sha-256",
       sizeBytes: 123
     });

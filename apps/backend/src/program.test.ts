@@ -75,6 +75,20 @@ describe("createApp", () => {
         correlationId: "correlation-1",
         fileName: "study.dcm",
         contentType: "application/dicom",
+        dicomMetadata: {
+          studyInstanceUid: "1.2.3",
+          seriesInstanceUid: "1.2.3.4",
+          sopInstanceUid: "1.2.3.4.5",
+          modality: "CT",
+          rows: 512,
+          columns: 512,
+          samplesPerPixel: 1,
+          photometricInterpretation: "MONOCHROME2",
+          bitsAllocated: 16,
+          bitsStored: 16,
+          highBit: 15,
+          pixelRepresentation: 1
+        },
         fileSha256: "sha-256",
         sizeBytes: 4
       })
@@ -106,10 +120,40 @@ describe("createApp", () => {
     expect(upload.status).toBe(200);
     expect(await upload.json()).toEqual({ ok: true, bytesReceived: 4 });
 
+    const uploadedBytes = await fetch(localUploadUrl.replace("uploadSessionId=", "ignored="));
+
+    expect(uploadedBytes.status).toBe(200);
+    expect(Array.from(new Uint8Array(await uploadedBytes.arrayBuffer()))).toEqual([1, 2, 3, 4]);
+
     const statusAfterUpload = await fetch(`${baseUrl}/api/upload-sessions/${session.uploadSessionId}`);
 
     expect(statusAfterUpload.status).toBe(200);
     expect(await statusAfterUpload.json()).toMatchObject({ status: "uploaded" });
+
+    const ohif = await fetch(`${baseUrl}/api/ohif/upload-sessions/${session.uploadSessionId}.json`);
+
+    expect(ohif.status).toBe(200);
+    expect(await ohif.json()).toMatchObject({
+      studies: [
+        {
+          StudyInstanceUID: "1.2.3",
+          series: [
+            {
+              SeriesInstanceUID: "1.2.3.4",
+              instances: [
+                {
+                  metadata: {
+                    Rows: 512,
+                    Columns: 512,
+                    SOPInstanceUID: "1.2.3.4.5"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    });
   });
 
   it("allows CORS from allowed origin", async () => {

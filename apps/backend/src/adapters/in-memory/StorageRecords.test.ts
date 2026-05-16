@@ -11,6 +11,8 @@ describe("makeInMemoryStorageRecords", () => {
       bucket: "bucket-1",
       objectName: "deidentified/correlation-1/session-1-study.dcm",
       status: "created",
+      fileName: "study.dcm",
+      dicomMetadata: { modality: "CT", rows: 512, columns: 512 },
       fileSha256: "sha-256",
       sizeBytes: 123
     });

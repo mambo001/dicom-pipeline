@@ -14,6 +14,15 @@ export function makeInMemoryObjectStorage(config: AppConfig): ObjectStorage {
         signedUploadUrl: `http://localhost:${config.port}/dev-storage?uploadSessionId=${encodeURIComponent(input.uploadSessionId)}&objectName=${encodeURIComponent(objectName)}`,
         expiresAt
       };
+    },
+    createSignedRead: async (objectName) => {
+      const expiresAt = new Date(Date.now() + config.signedUrlTtlSeconds * 1000).toISOString();
+
+      return {
+        objectName,
+        signedReadUrl: `http://localhost:${config.port}/dev-storage?objectName=${encodeURIComponent(objectName)}`,
+        expiresAt
+      };
     }
   };
 }

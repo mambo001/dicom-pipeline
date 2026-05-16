@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { DicomMetadataSummarySchema } from "./dicom";
 
 export const UploadSessionStatusSchema = Schema.Literal("created", "uploading", "uploaded", "failed");
 
@@ -8,6 +9,7 @@ export const CreateUploadSessionRequestSchema = Schema.Struct({
   correlationId: Schema.String,
   fileName: Schema.String,
   contentType: Schema.Literal("application/dicom"),
+  dicomMetadata: Schema.optional(DicomMetadataSummarySchema),
   fileSha256: Schema.optional(Schema.String),
   sizeBytes: Schema.optional(Schema.Number)
 });
@@ -31,6 +33,8 @@ export const StorageObjectRecordSchema = Schema.Struct({
   status: UploadSessionStatusSchema,
   createdAt: Schema.String,
   updatedAt: Schema.String,
+  fileName: Schema.optional(Schema.String),
+  dicomMetadata: Schema.optional(DicomMetadataSummarySchema),
   fileSha256: Schema.optional(Schema.String),
   sizeBytes: Schema.optional(Schema.Number)
 });
@@ -56,6 +60,7 @@ export function createUploadSessionRequest(
     correlationId: input.correlationId,
     fileName: input.fileName,
     contentType: input.contentType ?? "application/dicom",
+    dicomMetadata: input.dicomMetadata,
     fileSha256: input.fileSha256,
     sizeBytes: input.sizeBytes
   };

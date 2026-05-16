@@ -24,6 +24,20 @@ export function makeGcsObjectStorage(config: AppConfig): ObjectStorage {
         signedUploadUrl,
         expiresAt: new Date(expiresAtMs).toISOString()
       };
+    },
+    createSignedRead: async (objectName) => {
+      const expiresAtMs = Date.now() + config.signedUrlTtlSeconds * 1000;
+      const [signedReadUrl] = await bucket.file(objectName).getSignedUrl({
+        action: "read",
+        expires: expiresAtMs,
+        version: "v4"
+      });
+
+      return {
+        objectName,
+        signedReadUrl,
+        expiresAt: new Date(expiresAtMs).toISOString()
+      };
     }
   };
 }

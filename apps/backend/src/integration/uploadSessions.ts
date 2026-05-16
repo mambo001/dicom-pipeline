@@ -28,6 +28,8 @@ export async function createUploadSession(
     bucket: dependencies.objectStorage.bucket,
     objectName: signedUpload.objectName,
     status: "created",
+    fileName: request.fileName,
+    dicomMetadata: request.dicomMetadata,
     fileSha256: request.fileSha256,
     sizeBytes: request.sizeBytes
   });

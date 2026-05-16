@@ -24,5 +24,11 @@ describe("makeInMemoryObjectStorage", () => {
     expect(signedUpload.signedUploadUrl).toContain("uploadSessionId=session-1");
     expect(signedUpload.signedUploadUrl).toContain("objectName=deidentified%2Fcorrelation-1%2Fsession-1-patient-study_1.dcm");
     expect(Date.parse(signedUpload.expiresAt)).not.toBeNaN();
+
+    const signedRead = await storage.createSignedRead(signedUpload.objectName);
+
+    expect(signedRead.signedReadUrl).toContain("http://localhost:8080/dev-storage?");
+    expect(signedRead.signedReadUrl).toContain("objectName=deidentified%2Fcorrelation-1%2Fsession-1-patient-study_1.dcm");
+    expect(Date.parse(signedRead.expiresAt)).not.toBeNaN();
   });
 });

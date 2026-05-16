@@ -7,10 +7,19 @@ export const DicomMetadataSummarySchema = Schema.Struct({
   studyInstanceUid: Schema.optional(Schema.String),
   seriesInstanceUid: Schema.optional(Schema.String),
   sopInstanceUid: Schema.optional(Schema.String),
+  sopClassUid: Schema.optional(Schema.String),
   modality: Schema.optional(Schema.String),
   studyDate: Schema.optional(Schema.String),
   rows: Schema.optional(Schema.Number),
-  columns: Schema.optional(Schema.Number)
+  columns: Schema.optional(Schema.Number),
+  samplesPerPixel: Schema.optional(Schema.Number),
+  photometricInterpretation: Schema.optional(Schema.String),
+  bitsAllocated: Schema.optional(Schema.Number),
+  bitsStored: Schema.optional(Schema.Number),
+  highBit: Schema.optional(Schema.Number),
+  pixelRepresentation: Schema.optional(Schema.Number),
+  seriesNumber: Schema.optional(Schema.Number),
+  instanceNumber: Schema.optional(Schema.Number)
 });
 
 export const DeidentificationFindingSchema = Schema.Struct({

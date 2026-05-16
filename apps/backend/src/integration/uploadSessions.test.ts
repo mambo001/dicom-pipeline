@@ -20,11 +20,12 @@ describe("createUploadSession", () => {
         correlationId: "correlation-1",
         fileName: "study.dcm",
         contentType: "application/dicom",
+        dicomMetadata: { modality: "CT", rows: 512, columns: 512 },
         fileSha256: "sha-256",
         sizeBytes: 123
       },
       {
-        objectStorage: { bucket: "bucket-1", createSignedUpload },
+        objectStorage: { bucket: "bucket-1", createSignedUpload, createSignedRead: vi.fn() },
         storageRecords: { create, get: vi.fn(), updateStatus: vi.fn() }
       }
     );
@@ -41,6 +42,8 @@ describe("createUploadSession", () => {
       bucket: "bucket-1",
       objectName: `deidentified/correlation-1/${uploadSessionId}-study.dcm`,
       status: "created",
+      fileName: "study.dcm",
+      dicomMetadata: { modality: "CT", rows: 512, columns: 512 },
       fileSha256: "sha-256",
       sizeBytes: 123
     });
