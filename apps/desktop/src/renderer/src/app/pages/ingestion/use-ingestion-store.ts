@@ -53,15 +53,20 @@ function loadKnownUrls(): readonly string[] {
     try {
       return JSON.parse(stored) as string[];
     } catch {
-      return ["http://localhost:8080"];
+      return defaultKnownUrls;
     }
   }
-  return ["http://localhost:8080"];
+  return defaultKnownUrls;
 }
+
+const defaultKnownUrls = [
+  "http://localhost:8080",
+  "https://dicom-pipeline-backend-32692867045.us-central1.run.app"
+];
 
 function persistKnownUrl(url: string) {
   const stored = localStorage.getItem("dicom-known-urls");
-  let urls: string[] = ["http://localhost:8080"];
+  let urls: string[] = [...defaultKnownUrls];
   if (stored) {
     try {
       urls = JSON.parse(stored) as string[];
@@ -71,8 +76,8 @@ function persistKnownUrl(url: string) {
   }
   if (!urls.includes(url)) {
     urls = [url, ...urls].slice(0, 10);
-    localStorage.setItem("dicom-known-urls", JSON.stringify(urls));
   }
+  localStorage.setItem("dicom-known-urls", JSON.stringify(urls));
 }
 
 export type IngestionState = {
