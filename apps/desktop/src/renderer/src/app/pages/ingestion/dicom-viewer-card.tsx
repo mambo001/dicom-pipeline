@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { useIngestionStore } from "./use-ingestion-store";
 import { useCornerstoneDicomViewer } from "./use-cornerstone-dicom-viewer";
@@ -10,8 +12,25 @@ import { Details, InfoCard } from "./shared/info-card";
 export function DicomViewerCard() {
   const selectedFile = useIngestionStore((s) => s.selectedFile);
   const dicomInspection = useIngestionStore((s) => s.dicomInspection);
+  const uploadStatus = useIngestionStore((s) => s.uploadStatus);
+  const viewerSource = useIngestionStore((s) => s.viewerSource);
+  const signedReadUrl = useIngestionStore((s) => s.signedReadUrl);
+  const setViewerSource = useIngestionStore((s) => s.setViewerSource);
+  const loadSignedReadUrl = useIngestionStore((s) => s.loadSignedReadUrl);
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const cornerstone = useCornerstoneDicomViewer(selectedFile);
+
+  const imageSource = useMemo(() => {
+    if (viewerSource === "uploaded" && signedReadUrl) {
+      return { type: "url" as const, url: signedReadUrl };
+    }
+    if (selectedFile) {
+      return { type: "local" as const, path: selectedFile.path, sizeBytes: selectedFile.sizeBytes };
+    }
+    return undefined;
+  }, [viewerSource, signedReadUrl, selectedFile?.path, selectedFile?.sizeBytes]);
+
+  const cornerstone = useCornerstoneDicomViewer(imageSource);
   const preview = dicomInspection?.pixelPreview;
 
   useEffect(() => {
@@ -36,6 +55,8 @@ export function DicomViewerCard() {
     context.putImageData(imageData, 0, 0);
   }, [preview]);
 
+  const canViewUploaded = uploadStatus === "uploaded";
+
   return (
     <InfoCard title="DICOM Viewer" emptyText="Select a DICOM file to render a preview.">
       {selectedFile && (
@@ -47,8 +68,33 @@ export function DicomViewerCard() {
               color={cornerstone.status === "rendered" ? "success" : cornerstone.status === "failed" ? "warning" : "default"}
             />
             <Chip size="small" label={preview ? "Canvas fallback available" : "Canvas fallback unavailable"} color={preview ? "success" : "warning"} />
-            <Chip size="small" label="Prototype viewer" variant="outlined" />
           </Stack>
+
+          {canViewUploaded && (
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+              <ToggleButtonGroup
+                size="small"
+                value={viewerSource}
+                exclusive
+                onChange={(_, value) => {
+                  if (value === "uploaded") {
+                    void loadSignedReadUrl();
+                  } else {
+                    setViewerSource("local");
+                  }
+                }}
+              >
+                <ToggleButton value="local">Local preview</ToggleButton>
+                <ToggleButton value="uploaded">Uploaded file</ToggleButton>
+              </ToggleButtonGroup>
+              {viewerSource === "uploaded" && (
+                <Typography variant="caption" color="text.secondary">
+                  Viewing uploaded file from cloud storage
+                </Typography>
+              )}
+            </Stack>
+          )}
+
           <Box
             ref={cornerstone.elementRef}
             sx={{

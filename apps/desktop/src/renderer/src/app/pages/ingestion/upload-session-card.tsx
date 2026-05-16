@@ -33,7 +33,7 @@ export function UploadSessionCard() {
   const storageRecord = useIngestionStore((s) => s.storageRecord);
   const uploadStatus = useIngestionStore((s) => s.uploadStatus);
   const uploadProgress = useIngestionStore((s) => s.uploadProgress);
-  const openOhifViewer = useIngestionStore((s) => s.openOhifViewer);
+  const loadSignedReadUrl = useIngestionStore((s) => s.loadSignedReadUrl);
 
   return (
     <InfoCard title="Upload Session" emptyText="Request a session after selecting a file.">
@@ -62,11 +62,11 @@ export function UploadSessionCard() {
           <Button
             fullWidth
             disabled={uploadStatus !== "uploaded"}
-            onClick={openOhifViewer}
+            onClick={() => void loadSignedReadUrl()}
             sx={{ mt: 2 }}
             variant="outlined"
           >
-            Open In OHIF Viewer
+            View Uploaded File
           </Button>
         </>
       )}
