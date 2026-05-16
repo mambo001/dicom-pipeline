@@ -1,4 +1,6 @@
+import { useRef } from "react";
 import type { ReactNode } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -7,11 +9,13 @@ import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
 import LinearProgress from "@mui/material/LinearProgress";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemText from "@mui/material/ListItemText";
 import Stack from "@mui/material/Stack";
+import SvgIcon from "@mui/material/SvgIcon";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { alpha } from "@mui/material/styles";
@@ -214,14 +218,12 @@ export function IngestionWorkspace() {
             <Chip size="small" label={`${messages.length} events`} />
           </Stack>
           <Divider />
-          <List disablePadding>
-            {messages.length === 0 ? (
-              <ListItem disableGutters>
-                <ListItemText primary="No workflow events yet." />
-              </ListItem>
-            ) : (
-              messages.map((message, index) => (
-                <ListItem key={`${message.text}-${index}`} disableGutters>
+          {messages.length === 0 ? (
+            <Typography color="text.secondary" sx={{ mt: 1 }}>No workflow events yet.</Typography>
+          ) : (
+            <VirtualList height={240} items={messages} estimateSize={48}>
+              {(message, index) => (
+                <ListItem key={`${message.text}-${index}`} disableGutters sx={{ py: 0.5 }}>
                   <Chip
                     size="small"
                     label={message.level}
@@ -230,29 +232,37 @@ export function IngestionWorkspace() {
                   />
                   <ListItemText primary={message.text} />
                 </ListItem>
-              ))
-            )}
-          </List>
+              )}
+            </VirtualList>
+          )}
         </CardContent>
       </Card>
 
       <Card>
         <CardContent>
           <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-            <Typography variant="h2">Audit Timeline</Typography>
-            <Button variant="outlined" size="small" onClick={refreshTraceability} disabled={!selectedFile}>
-              Refresh trace
-            </Button>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+              <Typography variant="h2">Audit Timeline</Typography>
+              {auditEvents.length > 0 && (
+                <Chip size="small" label={`${auditEvents.length}`} color="primary" variant="outlined" />
+              )}
+            </Stack>
+            <IconButton
+              size="small"
+              onClick={refreshTraceability}
+              disabled={!selectedFile}
+              title="Refresh trace"
+            >
+              <RefreshIcon />
+            </IconButton>
           </Stack>
           <Divider />
-          <List disablePadding>
-            {auditEvents.length === 0 ? (
-              <ListItem disableGutters>
-                <ListItemText primary="No persisted audit events loaded." />
-              </ListItem>
-            ) : (
-              auditEvents.map((event) => (
-                <ListItem key={event.eventId} disableGutters>
+          {auditEvents.length === 0 ? (
+            <Typography color="text.secondary" sx={{ mt: 1 }}>No persisted audit events loaded.</Typography>
+          ) : (
+            <VirtualList height={240} items={auditEvents} estimateSize={48} getItemKey={(event) => event.eventId}>
+              {(event) => (
+                <ListItem disableGutters sx={{ py: 0.5 }}>
                   <Chip
                     size="small"
                     label={event.result}
@@ -264,9 +274,9 @@ export function IngestionWorkspace() {
                     secondary={`${formatTimestamp(event.occurredAt)} | ${event.target.kind}: ${event.target.id}`}
                   />
                 </ListItem>
-              ))
-            )}
-          </List>
+              )}
+            </VirtualList>
+          )}
         </CardContent>
       </Card>
     </Stack>
@@ -334,6 +344,47 @@ function Details(props: { readonly rows: readonly (readonly [string, string])[] 
           </Typography>
         </Box>
       ))}
+    </Box>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <SvgIcon fontSize="small">
+      <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+    </SvgIcon>
+  );
+}
+
+function VirtualList<T>(props: {
+  readonly height: number;
+  readonly items: readonly T[];
+  readonly estimateSize: number;
+  readonly getItemKey?: (item: T) => string;
+  readonly children: (item: T, index: number) => ReactNode;
+}) {
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: props.items.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => props.estimateSize,
+    getItemKey: props.getItemKey ? (index) => props.getItemKey!(props.items[index]) : undefined
+  });
+
+  return (
+    <Box ref={parentRef} sx={{ height: props.height, overflow: "auto" }}>
+      <Box sx={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+        {virtualizer.getVirtualItems().map((virtualItem) => (
+          <Box
+            key={virtualItem.key}
+            sx={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${virtualItem.start}px)` }}
+            data-index={virtualItem.index}
+            ref={virtualizer.measureElement}
+          >
+            {props.children(props.items[virtualItem.index], virtualItem.index)}
+          </Box>
+        ))}
+      </Box>
     </Box>
   );
 }
