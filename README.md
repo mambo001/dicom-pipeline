@@ -315,7 +315,7 @@ Backend environment variables:
 Known backend URLs in the desktop autocomplete:
 
 - `http://localhost:8080`
-- `https://dicom-pipeline-backend-32692867045.us-central1.run.app`
+- `https://dicom-pipeline-backend-wnlvetmltq-uc.a.run.app`
 
 ## Verification
 
@@ -329,6 +329,30 @@ terraform -chdir=infra/terraform fmt -check
 ```
 
 The backend and contracts packages include Vitest coverage for contract factories, validation-adjacent behavior, in-memory adapters, and upload session integration. The desktop renderer currently has no test files, so its Vitest command exits successfully with `--passWithNoTests`.
+
+## Desktop Packaging & Release
+
+Build distributable desktop packages locally:
+
+```bash
+npm run build --workspace @dicom-pipeline/desktop
+npm run dist:mac     # macOS arm64 DMG + ZIP
+npm run dist:win     # Windows x64 NSIS installer
+npm run dist:linux   # Linux x64 AppImage + deb
+```
+
+Output artifacts go to `apps/desktop/release/`. No code signing is configured; builds use ad-hoc signing on macOS and are unsigned on Windows/Linux.
+
+### CI Release
+
+Push a `v*` tag to trigger `.github/workflows/desktop-release.yml`, which builds on macOS, Windows, and Linux in parallel and uploads all artifacts to a GitHub Release:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The placeholder app icon uses the project palette (`#022B3A`, `#1F7A8C`, `#BFDBF7`). Replace `apps/desktop/build/icon.{icns,ico,png}` for production branding.
 
 ## Security Notes
 

@@ -20,7 +20,7 @@ export function InstructionsCard() {
           </Typography>
         </Stack>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          Use <strong>http://localhost:8080</strong> for local development or <strong>https://dicom-pipeline-backend-32692867045.us-central1.run.app</strong> for the deployed demo backend.
+          Use <strong>http://localhost:8080</strong> for local development or <strong>https://dicom-pipeline-backend-wnlvetmltq-uc.a.run.app</strong> for the deployed demo backend.
         </Typography>
       </CardContent>
     </Card>

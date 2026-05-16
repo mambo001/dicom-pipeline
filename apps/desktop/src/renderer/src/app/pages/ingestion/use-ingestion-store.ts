@@ -71,7 +71,7 @@ function loadKnownUrls(): readonly string[] {
 
 const defaultKnownUrls = [
   "http://localhost:8080",
-  "https://dicom-pipeline-backend-32692867045.us-central1.run.app"
+  "https://dicom-pipeline-backend-wnlvetmltq-uc.a.run.app"
 ];
 
 function persistKnownUrl(url: string) {
