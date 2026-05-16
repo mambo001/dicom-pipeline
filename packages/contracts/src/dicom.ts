@@ -19,7 +19,8 @@ export const DicomMetadataSummarySchema = Schema.Struct({
   highBit: Schema.optional(Schema.Number),
   pixelRepresentation: Schema.optional(Schema.Number),
   seriesNumber: Schema.optional(Schema.Number),
-  instanceNumber: Schema.optional(Schema.Number)
+  instanceNumber: Schema.optional(Schema.Number),
+  transferSyntax: Schema.optional(Schema.String)
 });
 
 export const DeidentificationFindingSchema = Schema.Struct({

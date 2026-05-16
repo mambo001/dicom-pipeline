@@ -54,6 +54,7 @@ type DicomMetadataSummary = {
   readonly pixelRepresentation?: number;
   readonly seriesNumber?: number;
   readonly instanceNumber?: number;
+  readonly transferSyntax?: string;
 };
 
 type DicomPixelPreview = {
@@ -96,7 +97,8 @@ const dicomStringTags = new Map<string, keyof DicomMetadataSummary>([
   ["0008,0016", "sopClassUid"],
   ["0008,0060", "modality"],
   ["0008,0020", "studyDate"],
-  ["0028,0004", "photometricInterpretation"]
+  ["0028,0004", "photometricInterpretation"],
+  ["0002,0010", "transferSyntax"]
 ]);
 
 const dicomNumericTags = new Map<string, keyof DicomMetadataSummary>([
@@ -358,30 +360,47 @@ function buildPixelPreview(
     return undefined;
   }
 
-  if (bitsAllocated !== 8 && bitsAllocated !== 16) {
-    warnings.push(`Pixel preview supports 8-bit and 16-bit grayscale images; this file uses ${bitsAllocated}-bit pixels.`);
+  if (bitsAllocated !== 1 && bitsAllocated !== 8 && bitsAllocated !== 16) {
+    warnings.push(`Pixel preview supports 1-bit, 8-bit, and 16-bit grayscale images; this file uses ${bitsAllocated}-bit pixels.`);
     return undefined;
   }
 
-  const bytesPerPixel = bitsAllocated / 8;
+  const bytesPerPixel = bitsAllocated <= 8 ? 1 : 2;
   const requiredBytes = rows * columns * samplesPerPixel * bytesPerPixel;
   if (pixelData.length < requiredBytes || pixelData.offset + requiredBytes > contents.length) {
     warnings.push("Pixel preview unavailable; pixel data length is shorter than expected for the image dimensions.");
     return undefined;
   }
 
-  const maxPreviewDimension = 256;
-  const scale = Math.max(1, Math.ceil(Math.max(columns, rows) / maxPreviewDimension));
+  const scale = Math.max(1, Math.ceil(Math.max(columns, rows) / 256));
   const width = Math.ceil(columns / scale);
   const height = Math.ceil(rows / scale);
   const rawValues: number[] = [];
 
-  for (let y = 0; y < height; y += 1) {
-    const sourceY = Math.min(rows - 1, y * scale);
-    for (let x = 0; x < width; x += 1) {
-      const sourceX = Math.min(columns - 1, x * scale);
-      const pixelOffset = pixelData.offset + (sourceY * columns + sourceX) * bytesPerPixel;
-      rawValues.push(readPixelValue(contents, pixelOffset, bitsAllocated, pixelRepresentation));
+  if (bitsAllocated === 1) {
+    const bitSamples = samplesPerPixel;
+    const totalBits = rows * columns * bitSamples;
+    for (let y = 0; y < height; y += 1) {
+      const sourceY = Math.min(rows - 1, y * scale);
+      for (let x = 0; x < width; x += 1) {
+        const sourceX = Math.min(columns - 1, x * scale);
+        const bitIndex = (sourceY * columns + sourceX) * bitSamples;
+        const byteIndex = pixelData.offset + Math.floor(bitIndex / 8);
+        const bitOffset = 7 - (bitIndex % 8);
+        if (byteIndex < contents.length) {
+          rawValues.push((contents[byteIndex] >> bitOffset) & 1);
+        }
+      }
+    }
+  } else {
+    const bytesPerPixel = bitsAllocated <= 8 ? 1 : 2;
+    for (let y = 0; y < height; y += 1) {
+      const sourceY = Math.min(rows - 1, y * scale);
+      for (let x = 0; x < width; x += 1) {
+        const sourceX = Math.min(columns - 1, x * scale);
+        const pixelOffset = pixelData.offset + (sourceY * columns + sourceX) * bytesPerPixel;
+        rawValues.push(readPixelValue(contents, pixelOffset, bitsAllocated, pixelRepresentation));
+      }
     }
   }
 

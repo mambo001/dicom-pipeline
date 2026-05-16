@@ -50,6 +50,7 @@ type DicomMetadataSummary = {
   readonly pixelRepresentation?: number;
   readonly seriesNumber?: number;
   readonly instanceNumber?: number;
+  readonly transferSyntax?: string;
 };
 
 type DeidentificationReport = {
