@@ -10,17 +10,7 @@ permissions:
 jobs:
   release:
     name: Build and release desktop app
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest
-            build_cmd: dist:mac
-            artifact: mac
-          - os: windows-latest
-            build_cmd: dist:win
-            artifact: win
-
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
@@ -39,12 +29,12 @@ jobs:
         run: npm run build --workspace @dicom-pipeline/desktop
 
       - name: Package desktop app
-        run: npm run ${{ matrix.build_cmd }} --workspace @dicom-pipeline/desktop
+        run: npm run dist:mac --workspace @dicom-pipeline/desktop
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: mac
           path: apps/desktop/release/*.*
 
   create-release:

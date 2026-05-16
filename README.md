@@ -337,21 +337,20 @@ Build distributable desktop packages locally:
 ```bash
 npm run build --workspace @dicom-pipeline/desktop
 npm run dist:mac     # macOS arm64 DMG + ZIP
-npm run dist:win     # Windows x64 NSIS installer
 ```
 
-Output artifacts go to `apps/desktop/release/`. No code signing is configured; builds use ad-hoc signing on macOS and are unsigned on Windows.
+Output artifacts go to `apps/desktop/release/`. No code signing is configured; builds use ad-hoc signing on macOS.
 
 ### CI Release
 
-Push a `v*` tag to trigger `.github/workflows/desktop-release.yml`, which builds on macOS and Windows in parallel and uploads all artifacts to a GitHub Release:
+Push a `v*` tag to trigger `.github/workflows/desktop-release.yml`, which builds on macOS and uploads artifacts to a GitHub Release:
 
 ```bash
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The placeholder app icon uses the project palette (`#022B3A`, `#1F7A8C`, `#BFDBF7`). Replace `apps/desktop/build/icon.{icns,ico}` for production branding.
+The placeholder app icon uses the project palette (`#022B3A`, `#1F7A8C`, `#BFDBF7`). Replace `apps/desktop/build/icon.icns` for production branding.
 
 ## Security Notes
 

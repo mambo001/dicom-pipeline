@@ -16,8 +16,7 @@
     "lint": "npm run typecheck",
     "test": "vitest run --passWithNoTests",
     "dist": "electron-builder",
-    "dist:mac": "electron-builder --mac",
-    "dist:win": "electron-builder --win"
+    "dist:mac": "electron-builder --mac"
   },
   "build": {
     "appId": "com.dicom-pipeline.prototype",
@@ -44,21 +43,8 @@
           "target": "zip",
           "arch": ["arm64"]
         }
-      ]
-    },
-    "win": {
-      "icon": "build/icon.ico",
-      "target": [
-        {
-          "target": "nsis",
-          "arch": ["x64"]
-        }
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+]
+  },
   },
   "dependencies": {
     "@dicom-pipeline/contracts": "0.1.0"
