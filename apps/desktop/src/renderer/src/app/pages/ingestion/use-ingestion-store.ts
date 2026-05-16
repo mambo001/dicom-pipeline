@@ -470,5 +470,5 @@ function addMessage(
   level: WorkflowMessage["level"],
   text: string
 ) {
-  set((state) => ({ messages: [{ level, text }, ...state.messages].slice(0, 8) }));
+  set((state) => ({ messages: [{ level, text }, ...state.messages] }));
 }
