@@ -15,7 +15,7 @@ describe("createApp", () => {
   let baseUrl: string;
 
   beforeEach(async () => {
-    const app = createApp(makeDevelopmentDependencies(config));
+    const app = createApp(makeDevelopmentDependencies(config), "development");
 
     await new Promise<void>((resolve) => {
       server = app.listen(0, "127.0.0.1", () => resolve());

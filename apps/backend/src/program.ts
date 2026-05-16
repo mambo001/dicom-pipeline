@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import {
   AuditEventSchema,
   CreateUploadSessionRequestSchema,
@@ -20,30 +21,42 @@ export type AppDependencies = {
   readonly storageRecords: StorageRecords;
 };
 
-export function createApp(dependencies: AppDependencies): express.Express {
+const WINDOW_MINUTES = 15;
+
+const auditWriteLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 200, standardHeaders: true, legacyHeaders: false });
+const auditReadLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 60, standardHeaders: true, legacyHeaders: false });
+const sessionCreateLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 10, standardHeaders: true, legacyHeaders: false });
+const sessionReadLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 60, standardHeaders: true, legacyHeaders: false });
+const statusUpdateLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 30, standardHeaders: true, legacyHeaders: false });
+const defaultLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 100, standardHeaders: true, legacyHeaders: false });
+
+export function createApp(dependencies: AppDependencies, appEnv: "development" | "production" = "development"): express.Express {
   const app = express();
 
   app.use(cors());
+  app.use(defaultLimiter);
 
-  app.put("/dev-storage", express.raw({ limit: "2gb", type: "application/dicom" }), async (request, response) => {
-    const uploadSessionId = String(request.query.uploadSessionId ?? "");
-    const objectName = String(request.query.objectName ?? "");
+  if (appEnv === "development") {
+    app.put("/dev-storage", express.raw({ limit: "2gb", type: "application/dicom" }), async (request, response) => {
+      const uploadSessionId = String(request.query.uploadSessionId ?? "");
+      const objectName = String(request.query.objectName ?? "");
 
-    if (!uploadSessionId || !objectName) {
-      response.status(400).json(apiError("invalid_dev_storage_request", "Upload session and object name are required"));
-      return;
-    }
+      if (!uploadSessionId || !objectName) {
+        response.status(400).json(apiError("invalid_dev_storage_request", "Upload session and object name are required"));
+        return;
+      }
 
-    const record = await dependencies.storageRecords.get(uploadSessionId);
+      const record = await dependencies.storageRecords.get(uploadSessionId);
 
-    if (!record || record.objectName !== objectName) {
-      response.status(404).json(apiError("upload_session_not_found", "Upload session was not found"));
-      return;
-    }
+      if (!record || record.objectName !== objectName) {
+        response.status(404).json(apiError("upload_session_not_found", "Upload session was not found"));
+        return;
+      }
 
-    await dependencies.storageRecords.updateStatus(uploadSessionId, "uploaded");
-    response.status(200).json({ ok: true, bytesReceived: request.body.length });
-  });
+      await dependencies.storageRecords.updateStatus(uploadSessionId, "uploaded");
+      response.status(200).json({ ok: true, bytesReceived: request.body.length });
+    });
+  }
 
   app.use(express.json({ limit: "1mb" }));
 
@@ -51,7 +64,7 @@ export function createApp(dependencies: AppDependencies): express.Express {
     response.json({ ok: true });
   });
 
-  app.post("/api/audit-events", async (request, response) => {
+  app.post("/api/audit-events", auditWriteLimiter, async (request, response) => {
     const validated = validateUnknown(AuditEventSchema, request.body);
 
     if (!validated.ok) {
@@ -63,12 +76,13 @@ export function createApp(dependencies: AppDependencies): express.Express {
     response.status(201).json(appended);
   });
 
-  app.get("/api/audit-events/:correlationId", async (request, response) => {
-    const events = await dependencies.auditLog.listByCorrelationId(request.params.correlationId);
+  app.get("/api/audit-events/:correlationId", auditReadLimiter, async (request, response) => {
+    const correlationId = request.params.correlationId as string;
+    const events = await dependencies.auditLog.listByCorrelationId(correlationId);
     response.json({ events });
   });
 
-  app.post("/api/upload-sessions", async (request, response) => {
+  app.post("/api/upload-sessions", sessionCreateLimiter, async (request, response) => {
     const validated = validateUnknown(CreateUploadSessionRequestSchema, request.body);
 
     if (!validated.ok) {
@@ -80,8 +94,9 @@ export function createApp(dependencies: AppDependencies): express.Express {
     response.status(201).json(uploadSession);
   });
 
-  app.get("/api/upload-sessions/:uploadSessionId", async (request, response) => {
-    const record = await dependencies.storageRecords.get(request.params.uploadSessionId);
+  app.get("/api/upload-sessions/:uploadSessionId", sessionReadLimiter, async (request, response) => {
+    const { uploadSessionId } = request.params as { readonly uploadSessionId: string };
+    const record = await dependencies.storageRecords.get(uploadSessionId);
 
     if (!record) {
       response.status(404).json(apiError("upload_session_not_found", "Upload session was not found"));
@@ -91,7 +106,7 @@ export function createApp(dependencies: AppDependencies): express.Express {
     response.json(record);
   });
 
-  app.post("/api/upload-sessions/:uploadSessionId/status", async (request, response) => {
+  app.post("/api/upload-sessions/:uploadSessionId/status", statusUpdateLimiter, async (request, response) => {
     const validated = validateUnknown(UploadStatusUpdateSchema, request.body);
 
     if (!validated.ok) {
@@ -99,8 +114,9 @@ export function createApp(dependencies: AppDependencies): express.Express {
       return;
     }
 
+    const { uploadSessionId } = request.params as { readonly uploadSessionId: string };
     const { status } = validated.value as UploadStatusUpdate;
-    const record = await dependencies.storageRecords.updateStatus(request.params.uploadSessionId, status);
+    const record = await dependencies.storageRecords.updateStatus(uploadSessionId, status);
 
     if (!record) {
       response.status(404).json(apiError("upload_session_not_found", "Upload session was not found"));
