@@ -12,3 +12,4 @@ service-account.json
 storage/
 uploads/
 tmp/
+release/
