@@ -23,17 +23,19 @@ export type AppDependencies = {
 
 const WINDOW_MINUTES = 15;
 
-const auditWriteLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 200, standardHeaders: true, legacyHeaders: false });
-const auditReadLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 60, standardHeaders: true, legacyHeaders: false });
-const sessionCreateLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 10, standardHeaders: true, legacyHeaders: false });
-const sessionReadLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 60, standardHeaders: true, legacyHeaders: false });
-const statusUpdateLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 30, standardHeaders: true, legacyHeaders: false });
-const defaultLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 100, standardHeaders: true, legacyHeaders: false });
+const skipPreflight = (request: express.Request) => request.method === "OPTIONS";
 
-export function createApp(dependencies: AppDependencies, appEnv: "development" | "production" = "development", allowedOrigins = "http://localhost:5173"): express.Express {
+const auditWriteLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 200, standardHeaders: true, legacyHeaders: false, skip: skipPreflight });
+const auditReadLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 60, standardHeaders: true, legacyHeaders: false, skip: skipPreflight });
+const sessionCreateLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 10, standardHeaders: true, legacyHeaders: false, skip: skipPreflight });
+const sessionReadLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 60, standardHeaders: true, legacyHeaders: false, skip: skipPreflight });
+const statusUpdateLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 30, standardHeaders: true, legacyHeaders: false, skip: skipPreflight });
+const defaultLimiter = rateLimit({ windowMs: WINDOW_MINUTES * 60_000, limit: 100, standardHeaders: true, legacyHeaders: false, skip: skipPreflight });
+
+export function createApp(dependencies: AppDependencies, appEnv: "development" | "production", allowedOrigins: string): express.Express {
   const app = express();
 
-  app.use(cors({ origin: allowedOrigins.split(","), maxAge: 86400 }));
+  app.use(cors({ origin: allowedOrigins.split(",").map((o) => o.trim()), maxAge: 86400 }));
   app.use(defaultLimiter);
 
   if (appEnv === "development") {
