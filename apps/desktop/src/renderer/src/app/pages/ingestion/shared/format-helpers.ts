@@ -25,6 +25,9 @@ export function metadataRows(metadata: DicomMetadataSummary): readonly (readonly
     ["Study UID", metadata.studyInstanceUid ?? "not present"],
     ["Series UID", metadata.seriesInstanceUid ?? "not present"],
     ["SOP UID", metadata.sopInstanceUid ?? "not present"],
-    ["Image Size", metadata.rows && metadata.columns ? `${metadata.columns} x ${metadata.rows}` : "not present"]
+    ["SOP Class", metadata.sopClassUid ?? "not present"],
+    ["Image Size", metadata.rows && metadata.columns ? `${metadata.columns} x ${metadata.rows}` : "not present"],
+    ["Photometric", metadata.photometricInterpretation ?? "not present"],
+    ["Bit Depth", metadata.bitsAllocated ? `${metadata.bitsAllocated} allocated / ${metadata.bitsStored ?? "?"} stored` : "not present"]
   ];
 }

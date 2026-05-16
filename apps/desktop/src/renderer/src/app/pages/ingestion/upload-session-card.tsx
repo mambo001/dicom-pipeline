@@ -1,4 +1,5 @@
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Grid from "@mui/material/Grid";
 import LinearProgress from "@mui/material/LinearProgress";
 import Stack from "@mui/material/Stack";
@@ -32,6 +33,7 @@ export function UploadSessionCard() {
   const storageRecord = useIngestionStore((s) => s.storageRecord);
   const uploadStatus = useIngestionStore((s) => s.uploadStatus);
   const uploadProgress = useIngestionStore((s) => s.uploadProgress);
+  const openOhifViewer = useIngestionStore((s) => s.openOhifViewer);
 
   return (
     <InfoCard title="Upload Session" emptyText="Request a session after selecting a file.">
@@ -57,6 +59,15 @@ export function UploadSessionCard() {
               <LinearProgress variant="determinate" value={uploadProgress} />
             </Box>
           )}
+          <Button
+            fullWidth
+            disabled={uploadStatus !== "uploaded"}
+            onClick={openOhifViewer}
+            sx={{ mt: 2 }}
+            variant="outlined"
+          >
+            Open In OHIF Viewer
+          </Button>
         </>
       )}
     </InfoCard>

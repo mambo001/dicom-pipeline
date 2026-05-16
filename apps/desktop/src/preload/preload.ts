@@ -37,10 +37,19 @@ type DicomMetadataSummary = {
   readonly studyInstanceUid?: string;
   readonly seriesInstanceUid?: string;
   readonly sopInstanceUid?: string;
+  readonly sopClassUid?: string;
   readonly modality?: string;
   readonly studyDate?: string;
   readonly rows?: number;
   readonly columns?: number;
+  readonly samplesPerPixel?: number;
+  readonly photometricInterpretation?: string;
+  readonly bitsAllocated?: number;
+  readonly bitsStored?: number;
+  readonly highBit?: number;
+  readonly pixelRepresentation?: number;
+  readonly seriesNumber?: number;
+  readonly instanceNumber?: number;
 };
 
 type DeidentificationReport = {

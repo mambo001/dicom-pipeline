@@ -41,10 +41,19 @@ type DicomMetadataSummary = {
   readonly studyInstanceUid?: string;
   readonly seriesInstanceUid?: string;
   readonly sopInstanceUid?: string;
+  readonly sopClassUid?: string;
   readonly modality?: string;
   readonly studyDate?: string;
   readonly rows?: number;
   readonly columns?: number;
+  readonly samplesPerPixel?: number;
+  readonly photometricInterpretation?: string;
+  readonly bitsAllocated?: number;
+  readonly bitsStored?: number;
+  readonly highBit?: number;
+  readonly pixelRepresentation?: number;
+  readonly seriesNumber?: number;
+  readonly instanceNumber?: number;
 };
 
 type DicomPixelPreview = {
@@ -84,13 +93,22 @@ const dicomStringTags = new Map<string, keyof DicomMetadataSummary>([
   ["0020,000d", "studyInstanceUid"],
   ["0020,000e", "seriesInstanceUid"],
   ["0008,0018", "sopInstanceUid"],
+  ["0008,0016", "sopClassUid"],
   ["0008,0060", "modality"],
-  ["0008,0020", "studyDate"]
+  ["0008,0020", "studyDate"],
+  ["0028,0004", "photometricInterpretation"]
 ]);
 
 const dicomNumericTags = new Map<string, keyof DicomMetadataSummary>([
+  ["0020,0011", "seriesNumber"],
+  ["0020,0013", "instanceNumber"],
+  ["0028,0002", "samplesPerPixel"],
   ["0028,0010", "rows"],
-  ["0028,0011", "columns"]
+  ["0028,0011", "columns"],
+  ["0028,0100", "bitsAllocated"],
+  ["0028,0101", "bitsStored"],
+  ["0028,0102", "highBit"],
+  ["0028,0103", "pixelRepresentation"]
 ]);
 
 const dicomPreviewNumericTags = new Map<string, "samplesPerPixel" | "bitsAllocated" | "bitsStored" | "pixelRepresentation">([
@@ -251,12 +269,12 @@ function inspectDicom(contents: Buffer): DicomInspection {
     }
 
     if (numericKey && valueLength >= 2) {
-      metadata[numericKey] = contents.readUInt16LE(valueOffset);
+      metadata[numericKey] = readDicomNumber(contents, valueOffset, valueLength, vr);
     }
 
     const previewNumericKey = dicomPreviewNumericTags.get(tag);
     if (previewNumericKey && valueLength >= 2) {
-      previewMetadata[previewNumericKey] = contents.readUInt16LE(valueOffset);
+      previewMetadata[previewNumericKey] = readDicomNumber(contents, valueOffset, valueLength, vr);
     }
 
     if (tag === "0028,0004") {
@@ -290,6 +308,14 @@ function inspectDicom(contents: Buffer): DicomInspection {
 
 function readDicomString(contents: Buffer, offset: number, length: number): string {
   return contents.subarray(offset, offset + length).toString("utf8").replace(/\0/g, "").trim();
+}
+
+function readDicomNumber(contents: Buffer, offset: number, length: number, vr: string): number {
+  if (vr === "IS") {
+    const value = Number.parseInt(readDicomString(contents, offset, length), 10);
+    return Number.isFinite(value) ? value : 0;
+  }
+  return contents.readUInt16LE(offset);
 }
 
 function buildDeidentificationReport(metadata: DicomMetadataSummary): DeidentificationReport {

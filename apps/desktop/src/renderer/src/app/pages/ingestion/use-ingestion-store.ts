@@ -110,6 +110,7 @@ export type IngestionState = {
   readonly selectFile: () => Promise<void>;
   readonly requestUploadSession: () => Promise<void>;
   readonly uploadFile: () => Promise<void>;
+  readonly openOhifViewer: () => void;
   readonly refreshTraceability: () => Promise<void>;
 };
 
@@ -174,7 +175,7 @@ export const useIngestionStore = create<IngestionState>((set, get) => ({
   },
 
   requestUploadSession: async () => {
-    const { backendUrl, selectedFile, correlationId } = get();
+    const { backendUrl, selectedFile, correlationId, dicomInspection } = get();
     if (!selectedFile) {
       addMessage(set, "error", "Select a DICOM file before requesting an upload session.");
       return;
@@ -193,6 +194,7 @@ export const useIngestionStore = create<IngestionState>((set, get) => ({
         correlationId,
         fileName: selectedFile.name,
         contentType: "application/dicom",
+        dicomMetadata: dicomInspection?.metadata,
         fileSha256: selectedFile.sha256,
         sizeBytes: selectedFile.sizeBytes
       })
@@ -268,6 +270,19 @@ export const useIngestionStore = create<IngestionState>((set, get) => ({
       );
       addMessage(set, "error", error instanceof Error ? error.message : "Upload failed.");
     }
+  },
+
+  openOhifViewer: () => {
+    const { backendUrl, uploadSession, uploadStatus } = get();
+    if (!uploadSession || uploadStatus !== "uploaded") {
+      addMessage(set, "error", "Upload a DICOM file before opening OHIF.");
+      return;
+    }
+
+    const manifestUrl = `${backendUrl}/api/ohif/upload-sessions/${uploadSession.uploadSessionId}.json`;
+    const viewerUrl = `https://viewer.ohif.org/viewer/dicomjson?url=${encodeURIComponent(manifestUrl)}`;
+    window.open(viewerUrl, "_blank", "noopener,noreferrer");
+    addMessage(set, "info", "Opened OHIF viewer with a DICOM JSON manifest.");
   },
 
   refreshTraceability: async () => {
