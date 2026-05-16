@@ -12,6 +12,9 @@ type DicomDesktopApi = {
   readonly readDicomFile: (filePath: string) => Promise<{ readonly name: string; readonly data: ArrayBuffer }>;
 };
 
+const ENGINE_ID = "dicom-preview-engine";
+const VIEWPORT_ID = "dicom-preview-viewport";
+
 let cornerstoneReady: Promise<void> | undefined;
 
 function getDesktopApi(): DicomDesktopApi {
@@ -21,11 +24,15 @@ function getDesktopApi(): DicomDesktopApi {
 function ensureCornerstoneReady(): Promise<void> {
   if (!cornerstoneReady) {
     cornerstoneReady = (async () => {
+      initDicomImageLoader();
       await initCornerstone();
-      initDicomImageLoader({ maxWebWorkers: 1 });
     })();
   }
   return cornerstoneReady;
+}
+
+async function prefetchImageMetadata(imageId: string): Promise<void> {
+  await dicomImageLoader.wadouri.loadImage(imageId).promise;
 }
 
 export function DicomViewerCard() {
@@ -33,7 +40,8 @@ export function DicomViewerCard() {
   const dicomInspection = useIngestionStore((s) => s.dicomInspection);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const cornerstoneElementRef = useRef<HTMLDivElement | null>(null);
-  const renderingEngineRef = useRef<RenderingEngine | undefined>(undefined);
+  const renderingEngineRef = useRef<RenderingEngine | null>(null);
+  const engineMountedRef = useRef(false);
   const [cornerstoneStatus, setCornerstoneStatus] = useState<"idle" | "loading" | "rendered" | "failed">("idle");
   const [cornerstoneError, setCornerstoneError] = useState<string | undefined>(undefined);
   const preview = dicomInspection?.pixelPreview;
@@ -46,48 +54,76 @@ export function DicomViewerCard() {
     }
 
     let cancelled = false;
-    const viewportId = "dicom-preview-viewport";
-    const renderingEngineId = `dicom-preview-${selectedFile.sha256.slice(0, 12)}`;
-    const renderWithCornerstone = async () => {
+
+    const loadAndView = async () => {
       setCornerstoneStatus("loading");
       setCornerstoneError(undefined);
 
       try {
         await ensureCornerstoneReady();
+        if (cancelled) return;
+
         const file = await getDesktopApi().readDicomFile(selectedFile.path);
-        if (cancelled) {
-          return;
+        if (cancelled) return;
+
+        if (file.data.byteLength !== selectedFile.sizeBytes) {
+          throw new Error(`Read ${file.data.byteLength} bytes, expected ${selectedFile.sizeBytes} bytes.`);
         }
 
-        const blob = new File([file.data], file.name, { type: "application/dicom" });
-        const imageId = dicomImageLoader.wadouri.fileManager.add(blob);
-        const renderingEngine = new RenderingEngine(renderingEngineId);
-        renderingEngine.enableElement({
-          element,
-          viewportId,
-          type: Enums.ViewportType.STACK
-        });
+        const bytes = new Uint8Array(file.data);
+        if (bytes.length > 132 && String.fromCharCode(...bytes.slice(128, 132)) !== "DICM") {
+          throw new Error("Read file bytes do not contain a DICOM preamble marker.");
+        }
 
-        const viewport = renderingEngine.getViewport(viewportId) as StackViewport;
+        const blob = new File([bytes], file.name, { type: "application/dicom" });
+        const imageId = dicomImageLoader.wadouri.fileManager.add(blob);
+
+        await prefetchImageMetadata(imageId);
+        if (cancelled) return;
+
+        let engine = renderingEngineRef.current;
+        if (!engine) {
+          engine = new RenderingEngine(ENGINE_ID);
+          engine.enableElement({ element, viewportId: VIEWPORT_ID, type: Enums.ViewportType.STACK });
+          renderingEngineRef.current = engine;
+          engineMountedRef.current = true;
+        }
+
+        const current = renderingEngineRef.current;
+        if (!current || cancelled) return;
+
+        const viewport = current.getViewport(VIEWPORT_ID) as StackViewport;
         await viewport.setStack([imageId]);
-        renderingEngine.resize(true, true);
+        if (cancelled) return;
+        current.resize(true, true);
         viewport.render();
-        renderingEngineRef.current = renderingEngine;
         setCornerstoneStatus("rendered");
       } catch (error) {
-        setCornerstoneStatus("failed");
-        setCornerstoneError(formatCornerstoneError(error));
+        if (!cancelled) {
+          setCornerstoneStatus("failed");
+          setCornerstoneError(formatCornerstoneError(error));
+        }
       }
     };
 
-    void renderWithCornerstone();
+    void loadAndView();
 
     return () => {
       cancelled = true;
-      renderingEngineRef.current?.destroy();
-      renderingEngineRef.current = undefined;
     };
   }, [selectedFile]);
+
+  useEffect(() => {
+    return () => {
+      if (engineMountedRef.current) {
+        renderingEngineRef.current?.destroy();
+        renderingEngineRef.current = null;
+        engineMountedRef.current = false;
+      }
+      dicomImageLoader.wadouri.dataSetCacheManager.purge();
+      dicomImageLoader.wadouri.fileManager.purge();
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -142,6 +178,11 @@ export function DicomViewerCard() {
             {cornerstoneStatus === "failed" && (
               <Typography sx={{ color: "white", left: 24, position: "absolute", right: 24, top: 24 }}>
                 Cornerstone could not render this file. {cornerstoneError}
+              </Typography>
+            )}
+            {cornerstoneStatus === "failed" && dicomInspection?.metadata.transferSyntax && (
+              <Typography sx={{ color: "#ff9800", fontSize: 12, left: 24, position: "absolute", right: 24, top: 56 }}>
+                Transfer syntax: {dicomInspection.metadata.transferSyntax}
               </Typography>
             )}
           </Box>
