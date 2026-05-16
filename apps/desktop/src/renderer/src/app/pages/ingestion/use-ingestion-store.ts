@@ -192,6 +192,17 @@ export const useIngestionStore = create<IngestionState>((set, get) => ({
       fileName: selectedFile.name
     });
 
+    const rawMetadata = dicomInspection?.metadata ?? {};
+    // Strip PHI before transmitting metadata to the backend.
+    // Patient identifiers are detected locally via de-identification preview
+    // but must not leave the machine in the create session request.
+    const {
+      patientName: _,
+      patientId: __,
+      patientBirthDate: ___,
+      ...safeMetadata
+    } = rawMetadata;
+
     const response = await fetch(`${backendUrl}/api/upload-sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -201,7 +212,7 @@ export const useIngestionStore = create<IngestionState>((set, get) => ({
         correlationId,
         fileName: selectedFile.name,
         contentType: "application/dicom",
-        dicomMetadata: dicomInspection?.metadata,
+        dicomMetadata: safeMetadata,
         fileSha256: selectedFile.sha256,
         sizeBytes: selectedFile.sizeBytes
       })
